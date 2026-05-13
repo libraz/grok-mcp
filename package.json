@@ -1,0 +1,70 @@
+{
+  "name": "grok-mcp",
+  "version": "0.1.0",
+  "description": "MCP server that exposes xAI Grok API to Claude Code, Codex CLI, and other MCP-capable clients.",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "grok",
+    "xai",
+    "claude-code",
+    "codex"
+  ],
+  "license": "MIT",
+  "author": "libraz",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/libraz/grok-mcp.git"
+  },
+  "homepage": "https://github.com/libraz/grok-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/libraz/grok-mcp/issues"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "bin": "./dist/index.js",
+  "files": [
+    "dist",
+    "src",
+    "tsconfig.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "yarn@4.14.1",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "prepare": "[ -d node_modules/typescript ] && tsc || true",
+    "prepublishOnly": "yarn build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "mime-types": "^3.0.2",
+    "openai": "^6.37.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.15",
+    "@types/mime-types": "^3.0.1",
+    "@types/node": "^25.7.0",
+    "@vitest/coverage-v8": "^4.1.6",
+    "npm-check-updates": "^22.2.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.6"
+  },
+  "volta": {
+    "node": "22.22.2",
+    "yarn": "4.14.1"
+  }
+}
