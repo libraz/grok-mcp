@@ -1,6 +1,6 @@
 {
   "name": "grok-mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "MCP server that exposes xAI Grok API to Claude Code, Codex CLI, and other MCP-capable clients.",
   "keywords": [
     "mcp",
