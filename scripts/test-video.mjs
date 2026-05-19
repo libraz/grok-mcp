@@ -3,8 +3,6 @@
 // client's per-request timeout, then polls grok_imagine_video_status manually.
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -14,21 +12,7 @@ const POLL_MAX_ATTEMPTS = 30; // 30 × 10s = 5 minutes max
 
 const loadKey = () => {
   if (process.env.XAI_API_KEY?.trim()) return process.env.XAI_API_KEY.trim();
-  try {
-    const data = JSON.parse(readFileSync(join(homedir(), '.claude.json'), 'utf8'));
-    const k = data?.mcpServers?.grok?.env?.XAI_API_KEY;
-    if (typeof k === 'string' && k.length > 0) return k;
-  } catch {
-    /* ignore */
-  }
-  try {
-    const toml = readFileSync(join(homedir(), '.codex', 'config.toml'), 'utf8');
-    const m = toml.match(/\[mcp_servers\.grok\][\s\S]*?XAI_API_KEY\s*=\s*"([^"]+)"/);
-    if (m) return m[1];
-  } catch {
-    /* ignore */
-  }
-  throw new Error('XAI_API_KEY not found.');
+  throw new Error('XAI_API_KEY not found. Set it in the environment before running live tests.');
 };
 
 const extractText = (res) => {

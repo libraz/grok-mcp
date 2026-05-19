@@ -1,12 +1,8 @@
 #!/usr/bin/env node
 // Live end-to-end scenario test against the real xAI API.
-// Reads XAI_API_KEY from env, falling back to whatever `grok-mcp init` wrote
-// into ~/.claude.json or ~/.codex/config.toml so the key never has to be
-// pasted on the command line.
+// Reads XAI_API_KEY from env. Keep live-test credentials out of MCP config files.
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -16,27 +12,7 @@ const loadKey = () => {
   if (process.env.XAI_API_KEY?.trim()) {
     return { key: process.env.XAI_API_KEY.trim(), source: 'env' };
   }
-  try {
-    const data = JSON.parse(readFileSync(join(homedir(), '.claude.json'), 'utf8'));
-    const k = data?.mcpServers?.grok?.env?.XAI_API_KEY;
-    if (typeof k === 'string' && k.length > 0) {
-      return { key: k, source: '~/.claude.json' };
-    }
-  } catch {
-    /* ignore */
-  }
-  try {
-    const toml = readFileSync(join(homedir(), '.codex', 'config.toml'), 'utf8');
-    const m = toml.match(/\[mcp_servers\.grok\][\s\S]*?XAI_API_KEY\s*=\s*"([^"]+)"/);
-    if (m) {
-      return { key: m[1], source: '~/.codex/config.toml' };
-    }
-  } catch {
-    /* ignore */
-  }
-  throw new Error(
-    'XAI_API_KEY not found. Run `node dist/index.js init` first, or set XAI_API_KEY in env.',
-  );
+  throw new Error('XAI_API_KEY not found. Set it in the environment before running live tests.');
 };
 
 const banner = (title) => {

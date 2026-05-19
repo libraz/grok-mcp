@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { stdin, stdout } from 'node:process';
@@ -21,17 +21,31 @@ type McpServerEntry = {
   env: Record<string, string>;
 };
 
+export type WriteConfigOptions = {
+  model: string;
+  apiKey?: string;
+};
+
 /** Subset of Claude Code's `~/.claude.json` we touch. Other keys are preserved verbatim. */
 type ClaudeConfig = {
   mcpServers?: Record<string, McpServerEntry>;
   [key: string]: unknown;
 };
 
-const buildEntry = (apiKey: string, model: string): McpServerEntry => ({
+const buildEntry = ({ apiKey, model }: WriteConfigOptions): McpServerEntry => ({
   command: 'npx',
   args: ['-y', PACKAGE_SPEC],
-  env: { XAI_API_KEY: apiKey, XAI_DEFAULT_MODEL: model },
+  env: {
+    ...(apiKey !== undefined && { XAI_API_KEY: apiKey }),
+    XAI_DEFAULT_MODEL: model,
+  },
 });
+
+const restrictFilePermissions = async (path: string): Promise<void> => {
+  await chmod(path, 0o600).catch(() => {
+    /* Best effort: some filesystems do not support POSIX permissions. */
+  });
+};
 
 /**
  * Merge a `grok` MCP entry into the Claude Code JSON config, preserving every other key.
@@ -39,8 +53,7 @@ const buildEntry = (apiKey: string, model: string): McpServerEntry => ({
  */
 export const writeClaudeConfig = async (
   path: string,
-  apiKey: string,
-  model: string,
+  options: WriteConfigOptions,
 ): Promise<void> => {
   let data: ClaudeConfig = {};
   if (existsSync(path)) {
@@ -56,9 +69,12 @@ export const writeClaudeConfig = async (
     }
   }
   data.mcpServers = data.mcpServers ?? {};
-  data.mcpServers.grok = buildEntry(apiKey, model);
+  data.mcpServers.grok = buildEntry(options);
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, `${JSON.stringify(data, null, 2)}\n`);
+  if (options.apiKey !== undefined) {
+    await restrictFilePermissions(path);
+  }
 };
 
 const escapeTomlString = (s: string): string =>
@@ -96,8 +112,7 @@ const stripCodexGrokSection = (content: string): string => {
  */
 export const writeCodexConfig = async (
   path: string,
-  apiKey: string,
-  model: string,
+  options: WriteConfigOptions,
 ): Promise<void> => {
   let existing = '';
   if (existsSync(path)) {
@@ -109,10 +124,15 @@ export const writeCodexConfig = async (
     '[mcp_servers.grok]',
     'command = "npx"',
     `args = ["-y", "${PACKAGE_SPEC}"]`,
-    `env = { XAI_API_KEY = "${escapeTomlString(apiKey)}", XAI_DEFAULT_MODEL = "${escapeTomlString(model)}" }`,
+    options.apiKey === undefined
+      ? `env = { XAI_DEFAULT_MODEL = "${escapeTomlString(options.model)}" }`
+      : `env = { XAI_API_KEY = "${escapeTomlString(options.apiKey)}", XAI_DEFAULT_MODEL = "${escapeTomlString(options.model)}" }`,
   ].join('\n');
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, `${prefix}${block}\n`);
+  if (options.apiKey !== undefined) {
+    await restrictFilePermissions(path);
+  }
 };
 
 /**
@@ -313,13 +333,12 @@ export const parseTargetChoice = (raw: string, defaultRaw: string): TargetKind[]
 const writeForKind = (
   kind: TargetKind,
   path: string,
-  apiKey: string,
-  model: string,
+  options: WriteConfigOptions,
 ): (() => Promise<void>) => {
   if (kind === 'codex') {
-    return () => writeCodexConfig(path, apiKey, model);
+    return () => writeCodexConfig(path, options);
   }
-  return () => writeClaudeConfig(path, apiKey, model);
+  return () => writeClaudeConfig(path, options);
 };
 
 const removeForKind = (kind: TargetKind, path: string): (() => Promise<RemoveOutcome>) => {
@@ -331,14 +350,14 @@ const removeForKind = (kind: TargetKind, path: string): (() => Promise<RemoveOut
 
 type Target = { label: string; path: string; write: () => Promise<void> };
 
-const pickTargets = (kinds: TargetKind[], apiKey: string, model: string): Target[] => {
+const pickTargets = (kinds: TargetKind[], options: WriteConfigOptions): Target[] => {
   const targets: Target[] = [];
   for (const opt of TARGET_OPTIONS) {
     if (!kinds.includes(opt.kind)) {
       continue;
     }
     const path = opt.resolvePath();
-    targets.push({ label: opt.label, path, write: writeForKind(opt.kind, path, apiKey, model) });
+    targets.push({ label: opt.label, path, write: writeForKind(opt.kind, path, options) });
   }
   return targets;
 };
@@ -351,22 +370,27 @@ const renderTargetMenu = (): string =>
   ].join('\n');
 
 /**
- * Run the interactive setup. Prompts for an xAI API key, default model, and which
- * MCP client config files to update, then writes the `grok` entry into each.
+ * Run the interactive setup. Prompts for whether to store an xAI API key and
+ * which MCP client config files to update, then writes the `grok` entry into each.
  */
 export const runInit = async (): Promise<void> => {
   const rl = createInterface({ input: stdin, output: stdout });
   try {
     stdout.write('grok-mcp setup\n\n');
 
-    const apiKey = await promptApiKey(rl);
     const model = process.env.XAI_DEFAULT_MODEL?.trim() || DEFAULT_MODEL;
+    const shouldStoreApiKey = await promptYesNo(
+      rl,
+      'Store XAI_API_KEY in the selected MCP config files?',
+      false,
+    );
+    const apiKey = shouldStoreApiKey ? await promptApiKey(rl) : undefined;
 
     stdout.write('\nWhere to install? (pick one or more, comma-separated)\n');
     stdout.write(`${renderTargetMenu()}\n`);
     const choice = (await rl.question('Choice [1,3]: ')).trim();
     const kinds = parseTargetChoice(choice, '1,3');
-    const targets = pickTargets(kinds, apiKey, model);
+    const targets = pickTargets(kinds, { apiKey, model });
 
     stdout.write('\nWill update:\n');
     for (const t of targets) {
@@ -386,6 +410,11 @@ export const runInit = async (): Promise<void> => {
       stdout.write(`Wrote ${displayPath(t.path)}\n`);
     }
 
+    if (apiKey === undefined) {
+      stdout.write(
+        '\nNo API key was written. Make sure XAI_API_KEY is set in the MCP client environment before starting the server.\n',
+      );
+    }
     stdout.write('\nDone. Restart your MCP client to pick up the new server.\n');
   } finally {
     rl.close();

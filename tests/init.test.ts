@@ -34,7 +34,7 @@ afterEach(async () => {
 describe('writeClaudeConfig', () => {
   it('creates a fresh config when the file is missing', async () => {
     const path = join(dir, 'nested', '.claude.json');
-    await writeClaudeConfig(path, 'xai-test', 'grok-4.3');
+    await writeClaudeConfig(path, { apiKey: 'xai-test', model: 'grok-4.3' });
 
     const parsed = JSON.parse(await readFile(path, 'utf8')) as {
       mcpServers: Record<string, { command: string; args: string[]; env: Record<string, string> }>;
@@ -56,7 +56,7 @@ describe('writeClaudeConfig', () => {
       }),
     );
 
-    await writeClaudeConfig(path, 'xai-new', 'grok-4.3');
+    await writeClaudeConfig(path, { apiKey: 'xai-new', model: 'grok-4.3' });
 
     const parsed = JSON.parse(await readFile(path, 'utf8')) as {
       otherTopLevel: { keep: boolean };
@@ -78,7 +78,10 @@ describe('writeClaudeConfig', () => {
       }),
     );
 
-    await writeClaudeConfig(path, 'xai-fresh', 'grok-4-1-fast-non-reasoning');
+    await writeClaudeConfig(path, {
+      apiKey: 'xai-fresh',
+      model: 'grok-4-1-fast-non-reasoning',
+    });
 
     const parsed = JSON.parse(await readFile(path, 'utf8')) as {
       mcpServers: Record<string, { command: string; env: Record<string, string> }>;
@@ -91,16 +94,27 @@ describe('writeClaudeConfig', () => {
   it('throws a clear error when the existing file is malformed JSON', async () => {
     const path = join(dir, '.claude.json');
     await writeFile(path, '{ not valid json');
-    await expect(writeClaudeConfig(path, 'xai-x', 'grok-4.3')).rejects.toThrow(
+    await expect(writeClaudeConfig(path, { apiKey: 'xai-x', model: 'grok-4.3' })).rejects.toThrow(
       /Failed to parse existing JSON/,
     );
+  });
+
+  it('can write a config without storing the API key', async () => {
+    const path = join(dir, '.claude.json');
+    await writeClaudeConfig(path, { model: 'grok-4.3' });
+
+    const parsed = JSON.parse(await readFile(path, 'utf8')) as {
+      mcpServers: Record<string, { env: Record<string, string> }>;
+    };
+    expect(parsed.mcpServers.grok?.env.XAI_API_KEY).toBeUndefined();
+    expect(parsed.mcpServers.grok?.env.XAI_DEFAULT_MODEL).toBe('grok-4.3');
   });
 });
 
 describe('writeCodexConfig', () => {
   it('creates a fresh config when the file is missing', async () => {
     const path = join(dir, 'nested', 'config.toml');
-    await writeCodexConfig(path, 'xai-test', 'grok-4.3');
+    await writeCodexConfig(path, { apiKey: 'xai-test', model: 'grok-4.3' });
 
     const text = await readFile(path, 'utf8');
     expect(text).toContain('[mcp_servers.grok]');
@@ -116,7 +130,7 @@ describe('writeCodexConfig', () => {
       ['[other]', 'key = "value"', '', '[another]', 'thing = 1', ''].join('\n'),
     );
 
-    await writeCodexConfig(path, 'xai-test', 'grok-4.3');
+    await writeCodexConfig(path, { apiKey: 'xai-test', model: 'grok-4.3' });
 
     const text = await readFile(path, 'utf8');
     expect(text).toContain('[other]');
@@ -141,7 +155,7 @@ describe('writeCodexConfig', () => {
       ].join('\n'),
     );
 
-    await writeCodexConfig(path, 'xai-new', 'grok-4.3');
+    await writeCodexConfig(path, { apiKey: 'xai-new', model: 'grok-4.3' });
 
     const text = await readFile(path, 'utf8');
     const grokBlocks = text.match(/\[mcp_servers\.grok\]/g) ?? [];
@@ -154,7 +168,7 @@ describe('writeCodexConfig', () => {
 
   it('escapes double quotes and backslashes in values', async () => {
     const path = join(dir, 'config.toml');
-    await writeCodexConfig(path, 'xai-"weird"\\value', 'grok-4.3');
+    await writeCodexConfig(path, { apiKey: 'xai-"weird"\\value', model: 'grok-4.3' });
 
     const text = await readFile(path, 'utf8');
     expect(text).toContain('XAI_API_KEY = "xai-\\"weird\\"\\\\value"');
@@ -164,10 +178,19 @@ describe('writeCodexConfig', () => {
     const path = join(dir, 'config.toml');
     await writeFile(path, '');
 
-    await writeCodexConfig(path, 'xai-test', 'grok-4.3');
+    await writeCodexConfig(path, { apiKey: 'xai-test', model: 'grok-4.3' });
 
     const text = await readFile(path, 'utf8');
     expect(text.startsWith('[mcp_servers.grok]')).toBe(true);
+  });
+
+  it('can write a config without storing the API key', async () => {
+    const path = join(dir, 'config.toml');
+    await writeCodexConfig(path, { model: 'grok-4.3' });
+
+    const text = await readFile(path, 'utf8');
+    expect(text).not.toContain('XAI_API_KEY');
+    expect(text).toContain('XAI_DEFAULT_MODEL = "grok-4.3"');
   });
 });
 
@@ -427,8 +450,23 @@ describe('runInit', () => {
     restoreEnv(envSnap);
   });
 
-  it('writes user and codex configs by default, prompting for the API key', async () => {
-    queueReadline(['xai-from-prompt', '', 'y']);
+  it('writes user and codex configs by default without storing the API key', async () => {
+    queueReadline(['', '', 'y']);
+    captureStdout();
+    await runInit();
+
+    const claude = JSON.parse(await readFile(join(dir, '.claude.json'), 'utf8')) as {
+      mcpServers: Record<string, { env: Record<string, string> }>;
+    };
+    expect(claude.mcpServers.grok?.env.XAI_API_KEY).toBeUndefined();
+    expect(claude.mcpServers.grok?.env.XAI_DEFAULT_MODEL).toBe('grok-4.3');
+
+    const codex = await readFile(join(dir, '.codex', 'config.toml'), 'utf8');
+    expect(codex).not.toContain('XAI_API_KEY');
+  });
+
+  it('stores the API key only when explicitly requested', async () => {
+    queueReadline(['y', 'xai-from-prompt', '', 'y']);
     captureStdout();
     await runInit();
 
@@ -436,7 +474,6 @@ describe('runInit', () => {
       mcpServers: Record<string, { env: Record<string, string> }>;
     };
     expect(claude.mcpServers.grok?.env.XAI_API_KEY).toBe('xai-from-prompt');
-    expect(claude.mcpServers.grok?.env.XAI_DEFAULT_MODEL).toBe('grok-4.3');
 
     const codex = await readFile(join(dir, '.codex', 'config.toml'), 'utf8');
     expect(codex).toContain('XAI_API_KEY = "xai-from-prompt"');
@@ -444,7 +481,7 @@ describe('runInit', () => {
 
   it('reuses XAI_API_KEY from env when the user presses Enter', async () => {
     process.env.XAI_API_KEY = 'xai-from-env';
-    queueReadline(['', '', 'y']);
+    queueReadline(['y', '', '', 'y']);
     captureStdout();
     await runInit();
 
@@ -456,7 +493,7 @@ describe('runInit', () => {
 
   it('honours an explicit override even when XAI_API_KEY is set', async () => {
     process.env.XAI_API_KEY = 'xai-from-env';
-    queueReadline(['xai-override', '', 'y']);
+    queueReadline(['y', 'xai-override', '', 'y']);
     captureStdout();
     await runInit();
 
@@ -468,7 +505,7 @@ describe('runInit', () => {
 
   it('picks up XAI_DEFAULT_MODEL from env for the written entries', async () => {
     process.env.XAI_DEFAULT_MODEL = 'grok-3-mini';
-    queueReadline(['xai-x', '', 'y']);
+    queueReadline(['', '', 'y']);
     captureStdout();
     await runInit();
 
@@ -479,18 +516,18 @@ describe('runInit', () => {
   });
 
   it('writes the project .mcp.json when target 2 is selected', async () => {
-    queueReadline(['xai-proj', '2', 'y']);
+    queueReadline(['', '2', 'y']);
     captureStdout();
     await runInit();
 
     const proj = JSON.parse(await readFile(join(dir, '.mcp.json'), 'utf8')) as {
       mcpServers: Record<string, { env: Record<string, string> }>;
     };
-    expect(proj.mcpServers.grok?.env.XAI_API_KEY).toBe('xai-proj');
+    expect(proj.mcpServers.grok?.env.XAI_API_KEY).toBeUndefined();
   });
 
   it('aborts without writing when the user declines the confirmation', async () => {
-    queueReadline(['xai-x', '', 'n']);
+    queueReadline(['', '', 'n']);
     const writes = captureStdout();
     await runInit();
 
@@ -499,7 +536,7 @@ describe('runInit', () => {
   });
 
   it('throws when the API key is blank and no env is set', async () => {
-    queueReadline(['', '', 'y']);
+    queueReadline(['y', '', '', 'y']);
     captureStdout();
     await expect(runInit()).rejects.toThrow(/API key is required/);
   });
@@ -515,9 +552,12 @@ describe('runUninstall', () => {
     process.env.HOME = dir;
     process.chdir(dir);
 
-    await writeClaudeConfig(join(dir, '.claude.json'), 'xai-x', 'grok-4.3');
-    await writeClaudeConfig(join(dir, '.mcp.json'), 'xai-x', 'grok-4.3');
-    await writeCodexConfig(join(dir, '.codex', 'config.toml'), 'xai-x', 'grok-4.3');
+    await writeClaudeConfig(join(dir, '.claude.json'), { apiKey: 'xai-x', model: 'grok-4.3' });
+    await writeClaudeConfig(join(dir, '.mcp.json'), { apiKey: 'xai-x', model: 'grok-4.3' });
+    await writeCodexConfig(join(dir, '.codex', 'config.toml'), {
+      apiKey: 'xai-x',
+      model: 'grok-4.3',
+    });
   });
 
   afterEach(() => {

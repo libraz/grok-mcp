@@ -29,16 +29,17 @@ xAI does not ship an official CLI, so terminal access to Grok means calling the 
 You need an xAI API key — get one at [console.x.ai](https://console.x.ai). Then run:
 
 ```bash
+export XAI_API_KEY="xai-..."
 npx -y github:libraz/grok-mcp init
 ```
 
-The interactive setup prompts for the API key and which configs to write into (the default model comes from `XAI_DEFAULT_MODEL` or falls back to `grok-4.3`):
+The interactive setup writes the MCP server entry into your selected client configs. By default it does **not** store `XAI_API_KEY` in those files; keep the key in the environment used to launch your MCP client. If you explicitly opt into storing the key during `init`, the generated config file is restricted to user-only permissions where the filesystem supports it.
+
+The default model comes from `XAI_DEFAULT_MODEL` or falls back to `grok-4.3`. Pick one or more config targets (comma-separated, e.g. `1,3`):
 
 - **Claude Code — user** (`~/.claude.json`): active across every Claude Code session
 - **Claude Code — project** (`./.mcp.json`): active only when Claude Code is opened in the current directory
 - **Codex CLI** (`~/.codex/config.toml`)
-
-Pick one or more (comma-separated, e.g. `1,3`). Re-running `init` safely replaces the existing `grok` entry without touching other servers.
 
 Restart your MCP client to pick up the new server.
 
@@ -57,7 +58,6 @@ Claude Code (`~/.claude.json` or `.mcp.json`):
       "command": "npx",
       "args": ["-y", "github:libraz/grok-mcp"],
       "env": {
-        "XAI_API_KEY": "xai-...",
         "XAI_DEFAULT_MODEL": "grok-4.3"
       }
     }
@@ -71,8 +71,10 @@ Codex CLI (`~/.codex/config.toml`):
 [mcp_servers.grok]
 command = "npx"
 args = ["-y", "github:libraz/grok-mcp"]
-env = { XAI_API_KEY = "xai-...", XAI_DEFAULT_MODEL = "grok-4.3" }
+env = { XAI_DEFAULT_MODEL = "grok-4.3" }
 ```
+
+Only add `XAI_API_KEY = "xai-..."` to these files if you accept storing a plaintext secret in the MCP client config.
 
 Once published to npm you can drop the `github:` prefix.
 

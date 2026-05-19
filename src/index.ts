@@ -19,7 +19,9 @@ Usage:
   grok-mcp --version Show version.
 
 Required environment:
-  XAI_API_KEY              xAI API key (get one at https://console.x.ai)
+  XAI_API_KEY              xAI API key (get one at https://console.x.ai).
+                           Keep it in your shell/MCP-client environment unless
+                           you explicitly opt into storing it during init.
 
 Optional environment:
   XAI_BASE_URL             Override API endpoint (default: https://api.x.ai/v1)

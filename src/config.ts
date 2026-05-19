@@ -53,7 +53,7 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): Config => {
   const apiKey = env.XAI_API_KEY?.trim();
   if (!apiKey) {
     throw new Error(
-      "XAI_API_KEY is not set. Configure it via your MCP client's `env` block. " +
+      'XAI_API_KEY is not set. Export it in the environment used by your MCP client. ' +
         'See: https://github.com/libraz/grok-mcp#configuration',
     );
   }
