@@ -11,7 +11,7 @@ xAI Grok API のための MCP サーバ。Claude Code・Codex CLI など [MCP](h
 
 ## 背景
 
-xAI は公式 CLI を提供していないため、端末から Grok を使うには API を直接叩く必要がある。Claude Code・Codex CLI はすでに MCP に対応しているので、Grok を MCP サーバとして包めば、普段使いのクライアントの中からツールとして呼び出せる。X（旧 Twitter）のリアルタイム検索 `x_search` は API 経由でしか利用できないため、別途 Grok を契約している場合でも価値がある。
+Claude Code・Codex CLI はすでに MCP に対応しているので、Grok を MCP サーバとして包めば、普段使いのクライアントの中からツールとして呼び出せる。xAI API（API 専用の `x_search` リアルタイム検索を含むフル機能）に向けるか、すでに `grok` CLI 経由で Grok を契約しているなら、その CLI に向けることもできる（トークン課金なし）。詳細は [バックエンド](#バックエンド)を参照。
 
 ## ツール
 
@@ -24,7 +24,25 @@ xAI は公式 CLI を提供していないため、端末から Grok を使う�
 | `grok_imagine_video_status` | 動画生成の進捗を request_id で polling |
 | `grok_estimate_cost` | モデル + トークン / 画像枚数 / 動画秒数から USD コストを推定 |
 
+## バックエンド
+
+`XAI_BACKEND` で応答の取得元を切り替える:
+
+| | `api`（既定） | `cli` |
+|---|---|---|
+| 認証 | `XAI_API_KEY` | `grok login`（OAuth / サブスク）— キー不要 |
+| 経路 | xAI REST API | ローカルの `grok` CLI をサブプロセス実行 |
+| モデル | `grok-4.3` 等（`grok_list_models`） | `grok-build`・`grok-composer-2.5-fast` 等 |
+| テキスト（`grok_ask`） | ✅ | ✅ |
+| Web 検索 | ✅ | ✅（`search: "web"` / `"both"` / `true`） |
+| X（Twitter）検索 | ✅ | ❌ |
+| 画像 / 動画生成 | ✅ | ❌ |
+
+すでに [grok CLI](https://github.com/xai-org/grok-cli) 経由で Grok を契約していて、API トークン課金を避けたい場合は `cli` モードが便利。テキスト専用で、`grok_imagine_*` や X 検索は `api` モードへ誘導する明確なエラーを返す。`grok_ask` は副作用のない単発の質問応答にするため、一時ディレクトリで単発プロンプトとして実行する（プロジェクトファイルを読まず、Web 検索は要求時のみ有効）。
+
 ## クイックスタート
+
+### API バックエンド（既定）
 
 xAI API キーが必要。[console.x.ai](https://console.x.ai) で発行する。あとは:
 
@@ -44,6 +62,17 @@ npx -y github:libraz/grok-mcp init
 再実行すると `grok` エントリのみ安全に置き換わり、他のサーバ設定は保持される。
 
 書き込み後、MCP クライアントを再起動すれば反映される。
+
+### CLI バックエンド
+
+`grok` CLI を入れてサインインし、`init` でバックエンド **2) grok CLI** を選ぶ:
+
+```bash
+grok login          # 初回のみ OAuth / サブスクのサインイン
+npx -y github:libraz/grok-mcp init
+```
+
+API キーの入力・保存は行われず、`init` は選択した設定に `XAI_BACKEND=cli`（および `GROK_CLI_MODEL`、既定 `grok-build`）を書き込む。起動環境の `PATH` に `grok` が無い場合は `GROK_BIN` でバイナリのパスを指定する。
 
 アンインストールしたい場合は `npx -y github:libraz/grok-mcp uninstall` を実行。`grok` エントリだけが削除され、他のサーバは残る。
 
@@ -84,11 +113,14 @@ npm 公開後は `github:` プレフィックスを外して利用可能。
 
 | 変数 | デフォルト | 用途 |
 |---|---|---|
-| `XAI_API_KEY` | —（必須） | xAI API キー |
-| `XAI_BASE_URL` | `https://api.x.ai/v1` | リージョン切替 / プロキシ |
-| `XAI_DEFAULT_MODEL` | `grok-4.3` | 既定モデル |
-| `XAI_TIMEOUT_MS` | `120000` | リクエスト / 動画 polling のタイムアウト |
+| `XAI_BACKEND` | `api` | 応答バックエンド: `api` または `cli` |
+| `XAI_API_KEY` | —（`api` で必須） | xAI API キー（`cli` では未使用） |
+| `XAI_BASE_URL` | `https://api.x.ai/v1` | リージョン切替 / プロキシ（`api`） |
+| `XAI_DEFAULT_MODEL` | `grok-4.3` | 既定モデル（`api`） |
+| `XAI_TIMEOUT_MS` | `120000` | リクエスト / 動画 polling / CLI のタイムアウト |
 | `XAI_MAX_IMAGE_MB` | `20` | 画像サイズ上限 |
+| `GROK_BIN` | `grok` | `grok` CLI バイナリのパス（`cli`） |
+| `GROK_CLI_MODEL` | — | `grok` CLI に渡す既定モデル（`cli`） |
 
 ## ツール詳細
 

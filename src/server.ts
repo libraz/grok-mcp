@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Config } from './config.js';
 import { createGrokClient } from './grok.js';
+import { createGrokCliClient } from './grok-cli.js';
 import { estimateCost } from './pricing.js';
 import {
   grokAskInputSchema,
@@ -41,7 +42,7 @@ const safe = async (fn: () => Promise<ToolResult>): Promise<ToolResult> => {
  * the MCP client sees a clean response instead of a transport-level failure.
  */
 export const createServer = (config: Config): McpServer => {
-  const grok = createGrokClient(config);
+  const grok = config.backend === 'cli' ? createGrokCliClient(config) : createGrokClient(config);
   const server = new McpServer({ name: 'grok-mcp', version: PACKAGE_VERSION });
 
   server.registerTool(

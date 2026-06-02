@@ -54,4 +54,38 @@ describe('loadConfig', () => {
   it('throws when XAI_API_KEY is whitespace only', () => {
     expect(() => loadConfig({ XAI_API_KEY: '   ' })).toThrow(/XAI_API_KEY is not set/);
   });
+
+  it('defaults the backend to api', () => {
+    expect(loadConfig({ XAI_API_KEY: 'xai-test' }).backend).toBe('api');
+  });
+
+  it('does not require XAI_API_KEY when backend is cli', () => {
+    const config = loadConfig({ XAI_BACKEND: 'cli' });
+    expect(config.backend).toBe('cli');
+    expect(config.apiKey).toBe('');
+    expect(config.grokBin).toBe('grok');
+  });
+
+  it('honors GROK_BIN and GROK_CLI_MODEL', () => {
+    const config = loadConfig({
+      XAI_BACKEND: 'cli',
+      GROK_BIN: '/opt/grok/bin/grok',
+      GROK_CLI_MODEL: 'grok-build',
+    });
+    expect(config.grokBin).toBe('/opt/grok/bin/grok');
+    expect(config.cliDefaultModel).toBe('grok-build');
+  });
+
+  it('accepts case-insensitive backend values', () => {
+    expect(loadConfig({ XAI_BACKEND: '  CLI ' }).backend).toBe('cli');
+    expect(loadConfig({ XAI_API_KEY: 'k', XAI_BACKEND: 'API' }).backend).toBe('api');
+  });
+
+  it('throws on an invalid backend', () => {
+    expect(() => loadConfig({ XAI_BACKEND: 'local' })).toThrow(/Invalid XAI_BACKEND/);
+  });
+
+  it('omits cliDefaultModel when GROK_CLI_MODEL is unset', () => {
+    expect(loadConfig({ XAI_BACKEND: 'cli' }).cliDefaultModel).toBeUndefined();
+  });
 });

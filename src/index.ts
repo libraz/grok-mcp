@@ -18,17 +18,26 @@ Usage:
   grok-mcp --help    Show this help.
   grok-mcp --version Show version.
 
-Required environment:
+Backends:
+  XAI_BACKEND=api (default) calls the xAI REST API and needs XAI_API_KEY.
+  XAI_BACKEND=cli shells out to the local grok CLI (auth via "grok login");
+  no API key is required. CLI mode is text-only — image/video generation and
+  X search stay API-only.
+
+Required environment (api backend only):
   XAI_API_KEY              xAI API key (get one at https://console.x.ai).
                            Keep it in your shell/MCP-client environment unless
                            you explicitly opt into storing it during init.
 
 Optional environment:
+  XAI_BACKEND              Response backend: api (default) or cli
   XAI_BASE_URL             Override API endpoint (default: https://api.x.ai/v1)
-  XAI_DEFAULT_MODEL        Default model id (default: grok-4.3)
+  XAI_DEFAULT_MODEL        Default model id for api backend (default: grok-4.3)
   XAI_TIMEOUT_MS           Request timeout in ms (default: 120000)
   XAI_MAX_IMAGE_MB         Max image size for base64 encoding (default: 20)
   XAI_MAX_VIDEO_MB         (Reserved, no video input is documented by xAI yet)
+  GROK_BIN                 Path to the grok CLI binary (cli backend; default: grok)
+  GROK_CLI_MODEL           Default model id for cli backend (e.g. grok-build)
 
 Docs: https://github.com/libraz/grok-mcp
 `;

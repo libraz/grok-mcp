@@ -11,7 +11,7 @@ MCP server for the xAI Grok API. Works with Claude Code, Codex CLI, and any othe
 
 ## Motivation
 
-xAI does not ship an official CLI, so terminal access to Grok means calling the API directly. Claude Code and Codex CLI already speak MCP, so wrapping Grok as an MCP server lets you call it as a tool from inside the client you already use. The X (formerly Twitter) realtime search exposed via `x_search` is only reachable through the API, which makes this useful even if you already pay for Grok elsewhere.
+Claude Code and Codex CLI already speak MCP, so wrapping Grok as an MCP server lets you call it as a tool from inside the client you already use. Point it at the xAI API (full feature set, including the `x_search` realtime X / Twitter search that is API-only) or, if you already pay for Grok through the `grok` CLI, at that CLI instead — no per-token API billing. See [Backends](#backends).
 
 ## Tools
 
@@ -24,7 +24,25 @@ xAI does not ship an official CLI, so terminal access to Grok means calling the 
 | `grok_imagine_video_status` | Poll an in-flight video generation by `request_id` |
 | `grok_estimate_cost` | Estimate USD cost from model + tokens / images / video seconds |
 
+## Backends
+
+`XAI_BACKEND` selects where responses come from:
+
+| | `api` (default) | `cli` |
+|---|---|---|
+| Auth | `XAI_API_KEY` | `grok login` (OAuth / subscription) — no key needed |
+| Transport | xAI REST API | local `grok` CLI subprocess |
+| Models | `grok-4.3`, … (`grok_list_models`) | `grok-build`, `grok-composer-2.5-fast`, … |
+| Text (`grok_ask`) | ✅ | ✅ |
+| Web search | ✅ | ✅ (`search: "web"` / `"both"` / `true`) |
+| X (Twitter) search | ✅ | ❌ |
+| Image / video generation | ✅ | ❌ |
+
+Use `cli` mode if you already have a Grok subscription via the [grok CLI](https://github.com/xai-org/grok-cli) and would rather not pay per API token. It is text-only: `grok_imagine_*` and X search return a clear error pointing back to `api` mode. The CLI runs each `grok_ask` as a single-turn prompt in a temp directory (no project files, web search off unless requested) to keep it a side-effect-free question/answer call.
+
 ## Quick start
+
+### API backend (default)
 
 You need an xAI API key — get one at [console.x.ai](https://console.x.ai). Then run:
 
@@ -42,6 +60,17 @@ The default model comes from `XAI_DEFAULT_MODEL` or falls back to `grok-4.3`. Pi
 - **Codex CLI** (`~/.codex/config.toml`)
 
 Restart your MCP client to pick up the new server.
+
+### CLI backend
+
+Install the `grok` CLI and sign in, then run `init` and choose backend **2) grok CLI**:
+
+```bash
+grok login          # one-time OAuth / subscription sign-in
+npx -y github:libraz/grok-mcp init
+```
+
+No API key is requested or stored — `init` writes `XAI_BACKEND=cli` (and `GROK_CLI_MODEL`, default `grok-build`) into the selected configs. Override the binary location with `GROK_BIN` if `grok` is not on the launch environment's `PATH`.
 
 To remove the entry later, run `npx -y github:libraz/grok-mcp uninstall` — it drops only the `grok` server, other entries are kept.
 
@@ -82,11 +111,14 @@ Once published to npm you can drop the `github:` prefix.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `XAI_API_KEY` | — (required) | xAI API key |
-| `XAI_BASE_URL` | `https://api.x.ai/v1` | Region override / proxy |
-| `XAI_DEFAULT_MODEL` | `grok-4.3` | Default model |
-| `XAI_TIMEOUT_MS` | `120000` | Request / video polling timeout |
+| `XAI_BACKEND` | `api` | Response backend: `api` or `cli` |
+| `XAI_API_KEY` | — (required for `api`) | xAI API key (not used by `cli`) |
+| `XAI_BASE_URL` | `https://api.x.ai/v1` | Region override / proxy (`api`) |
+| `XAI_DEFAULT_MODEL` | `grok-4.3` | Default model (`api`) |
+| `XAI_TIMEOUT_MS` | `120000` | Request / video polling / CLI timeout |
 | `XAI_MAX_IMAGE_MB` | `20` | Max image size accepted as base64 input |
+| `GROK_BIN` | `grok` | Path to the `grok` CLI binary (`cli`) |
+| `GROK_CLI_MODEL` | — | Default model passed to the `grok` CLI (`cli`) |
 
 ## Tool reference
 

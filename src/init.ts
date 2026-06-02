@@ -4,6 +4,7 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { stdin, stdout } from 'node:process';
 import { createInterface, type Interface as ReadlineInterface } from 'node:readline/promises';
+import type { Backend } from './config.js';
 
 /**
  * Package specifier written into generated config snippets.
@@ -11,8 +12,11 @@ import { createInterface, type Interface as ReadlineInterface } from 'node:readl
  */
 const PACKAGE_SPEC = 'github:libraz/grok-mcp';
 
-/** Default model id used when the user accepts the suggested value. */
+/** Default model id for the API backend when the user accepts the suggested value. */
 const DEFAULT_MODEL = 'grok-4.3';
+
+/** Default model id for the CLI backend. Matches the grok CLI's own default. */
+const DEFAULT_CLI_MODEL = 'grok-build';
 
 /** Shape of the `mcpServers.<name>` entry shared by Claude Code and Codex CLI. */
 type McpServerEntry = {
@@ -22,6 +26,7 @@ type McpServerEntry = {
 };
 
 export type WriteConfigOptions = {
+  backend: Backend;
   model: string;
   apiKey?: string;
 };
@@ -32,13 +37,26 @@ type ClaudeConfig = {
   [key: string]: unknown;
 };
 
-const buildEntry = ({ apiKey, model }: WriteConfigOptions): McpServerEntry => ({
+/**
+ * Build the `env` map written into the generated config, keyed by backend.
+ *
+ * - `cli`: select the CLI backend and pin its default model; auth is handled by
+ *   `grok login`, so no API key is written.
+ * - `api`: pin the API default model, and include the API key only when the user
+ *   opted into storing it.
+ */
+const buildEnv = ({ backend, apiKey, model }: WriteConfigOptions): Record<string, string> =>
+  backend === 'cli'
+    ? { XAI_BACKEND: 'cli', GROK_CLI_MODEL: model }
+    : {
+        ...(apiKey !== undefined && { XAI_API_KEY: apiKey }),
+        XAI_DEFAULT_MODEL: model,
+      };
+
+const buildEntry = (options: WriteConfigOptions): McpServerEntry => ({
   command: 'npx',
   args: ['-y', PACKAGE_SPEC],
-  env: {
-    ...(apiKey !== undefined && { XAI_API_KEY: apiKey }),
-    XAI_DEFAULT_MODEL: model,
-  },
+  env: buildEnv(options),
 });
 
 const restrictFilePermissions = async (path: string): Promise<void> => {
@@ -120,13 +138,14 @@ export const writeCodexConfig = async (
   }
   const stripped = stripCodexGrokSection(existing).replace(/\n*$/, '');
   const prefix = stripped.length > 0 ? `${stripped}\n\n` : '';
+  const envPairs = Object.entries(buildEnv(options))
+    .map(([key, value]) => `${key} = "${escapeTomlString(value)}"`)
+    .join(', ');
   const block = [
     '[mcp_servers.grok]',
     'command = "npx"',
     `args = ["-y", "${PACKAGE_SPEC}"]`,
-    options.apiKey === undefined
-      ? `env = { XAI_DEFAULT_MODEL = "${escapeTomlString(options.model)}" }`
-      : `env = { XAI_API_KEY = "${escapeTomlString(options.apiKey)}", XAI_DEFAULT_MODEL = "${escapeTomlString(options.model)}" }`,
+    `env = { ${envPairs} }`,
   ].join('\n');
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, `${prefix}${block}\n`);
@@ -254,6 +273,20 @@ const promptYesNo = async (
   return ans === 'y' || ans === 'yes';
 };
 
+const promptBackend = async (rl: ReadlineInterface): Promise<Backend> => {
+  stdout.write('Backend:\n');
+  stdout.write('  1) xAI API   needs XAI_API_KEY; full feature set\n');
+  stdout.write('  2) grok CLI  auth via `grok login`, no API key; text-only\n');
+  const ans = (await rl.question('Choice [1]: ')).trim();
+  if (ans === '' || ans === '1') {
+    return 'api';
+  }
+  if (ans === '2') {
+    return 'cli';
+  }
+  throw new Error(`Invalid choice: ${ans}`);
+};
+
 const promptApiKey = async (rl: ReadlineInterface): Promise<string> => {
   const envKey = process.env.XAI_API_KEY?.trim();
   if (envKey) {
@@ -378,19 +411,28 @@ export const runInit = async (): Promise<void> => {
   try {
     stdout.write('grok-mcp setup\n\n');
 
-    const model = process.env.XAI_DEFAULT_MODEL?.trim() || DEFAULT_MODEL;
-    const shouldStoreApiKey = await promptYesNo(
-      rl,
-      'Store XAI_API_KEY in the selected MCP config files?',
-      false,
-    );
-    const apiKey = shouldStoreApiKey ? await promptApiKey(rl) : undefined;
+    const backend = await promptBackend(rl);
+    stdout.write('\n');
+
+    let model: string;
+    let apiKey: string | undefined;
+    if (backend === 'cli') {
+      model = process.env.GROK_CLI_MODEL?.trim() || DEFAULT_CLI_MODEL;
+    } else {
+      model = process.env.XAI_DEFAULT_MODEL?.trim() || DEFAULT_MODEL;
+      const shouldStoreApiKey = await promptYesNo(
+        rl,
+        'Store XAI_API_KEY in the selected MCP config files?',
+        false,
+      );
+      apiKey = shouldStoreApiKey ? await promptApiKey(rl) : undefined;
+    }
 
     stdout.write('\nWhere to install? (pick one or more, comma-separated)\n');
     stdout.write(`${renderTargetMenu()}\n`);
     const choice = (await rl.question('Choice [1,3]: ')).trim();
     const kinds = parseTargetChoice(choice, '1,3');
-    const targets = pickTargets(kinds, { apiKey, model });
+    const targets = pickTargets(kinds, { backend, apiKey, model });
 
     stdout.write('\nWill update:\n');
     for (const t of targets) {
@@ -410,7 +452,12 @@ export const runInit = async (): Promise<void> => {
       stdout.write(`Wrote ${displayPath(t.path)}\n`);
     }
 
-    if (apiKey === undefined) {
+    if (backend === 'cli') {
+      stdout.write(
+        '\nCLI backend selected. Make sure the grok CLI is installed and you have run ' +
+          '`grok login`. Image/video generation and X search are not available in this mode.\n',
+      );
+    } else if (apiKey === undefined) {
       stdout.write(
         '\nNo API key was written. Make sure XAI_API_KEY is set in the MCP client environment before starting the server.\n',
       );

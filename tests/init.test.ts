@@ -396,12 +396,14 @@ type EnvSnapshot = {
   HOME: string | undefined;
   XAI_API_KEY: string | undefined;
   XAI_DEFAULT_MODEL: string | undefined;
+  GROK_CLI_MODEL: string | undefined;
 };
 
 const snapshotEnv = (): EnvSnapshot => ({
   HOME: process.env.HOME,
   XAI_API_KEY: process.env.XAI_API_KEY,
   XAI_DEFAULT_MODEL: process.env.XAI_DEFAULT_MODEL,
+  GROK_CLI_MODEL: process.env.GROK_CLI_MODEL,
 });
 
 const restoreEnv = (snap: EnvSnapshot): void => {
@@ -442,6 +444,7 @@ describe('runInit', () => {
     process.env.HOME = dir;
     delete process.env.XAI_API_KEY;
     delete process.env.XAI_DEFAULT_MODEL;
+    delete process.env.GROK_CLI_MODEL;
     process.chdir(dir);
   });
 
@@ -451,7 +454,7 @@ describe('runInit', () => {
   });
 
   it('writes user and codex configs by default without storing the API key', async () => {
-    queueReadline(['', '', 'y']);
+    queueReadline(['1', '', '', 'y']);
     captureStdout();
     await runInit();
 
@@ -466,7 +469,7 @@ describe('runInit', () => {
   });
 
   it('stores the API key only when explicitly requested', async () => {
-    queueReadline(['y', 'xai-from-prompt', '', 'y']);
+    queueReadline(['1', 'y', 'xai-from-prompt', '', 'y']);
     captureStdout();
     await runInit();
 
@@ -481,7 +484,7 @@ describe('runInit', () => {
 
   it('reuses XAI_API_KEY from env when the user presses Enter', async () => {
     process.env.XAI_API_KEY = 'xai-from-env';
-    queueReadline(['y', '', '', 'y']);
+    queueReadline(['1', 'y', '', '', 'y']);
     captureStdout();
     await runInit();
 
@@ -493,7 +496,7 @@ describe('runInit', () => {
 
   it('honours an explicit override even when XAI_API_KEY is set', async () => {
     process.env.XAI_API_KEY = 'xai-from-env';
-    queueReadline(['y', 'xai-override', '', 'y']);
+    queueReadline(['1', 'y', 'xai-override', '', 'y']);
     captureStdout();
     await runInit();
 
@@ -505,7 +508,7 @@ describe('runInit', () => {
 
   it('picks up XAI_DEFAULT_MODEL from env for the written entries', async () => {
     process.env.XAI_DEFAULT_MODEL = 'grok-3-mini';
-    queueReadline(['', '', 'y']);
+    queueReadline(['1', '', '', 'y']);
     captureStdout();
     await runInit();
 
@@ -516,7 +519,7 @@ describe('runInit', () => {
   });
 
   it('writes the project .mcp.json when target 2 is selected', async () => {
-    queueReadline(['', '2', 'y']);
+    queueReadline(['1', '', '2', 'y']);
     captureStdout();
     await runInit();
 
@@ -527,7 +530,7 @@ describe('runInit', () => {
   });
 
   it('aborts without writing when the user declines the confirmation', async () => {
-    queueReadline(['', '', 'n']);
+    queueReadline(['1', '', '', 'n']);
     const writes = captureStdout();
     await runInit();
 
@@ -536,9 +539,40 @@ describe('runInit', () => {
   });
 
   it('throws when the API key is blank and no env is set', async () => {
-    queueReadline(['y', '', '', 'y']);
+    queueReadline(['1', 'y', '', '', 'y']);
     captureStdout();
     await expect(runInit()).rejects.toThrow(/API key is required/);
+  });
+
+  it('writes a CLI-backend config without prompting for an API key', async () => {
+    queueReadline(['2', '', 'y']);
+    captureStdout();
+    await runInit();
+
+    const claude = JSON.parse(await readFile(join(dir, '.claude.json'), 'utf8')) as {
+      mcpServers: Record<string, { env: Record<string, string> }>;
+    };
+    expect(claude.mcpServers.grok?.env.XAI_BACKEND).toBe('cli');
+    expect(claude.mcpServers.grok?.env.GROK_CLI_MODEL).toBe('grok-build');
+    expect(claude.mcpServers.grok?.env.XAI_API_KEY).toBeUndefined();
+    expect(claude.mcpServers.grok?.env.XAI_DEFAULT_MODEL).toBeUndefined();
+
+    const codex = await readFile(join(dir, '.codex', 'config.toml'), 'utf8');
+    expect(codex).toContain('XAI_BACKEND = "cli"');
+    expect(codex).toContain('GROK_CLI_MODEL = "grok-build"');
+    expect(codex).not.toContain('XAI_API_KEY');
+  });
+
+  it('honours GROK_CLI_MODEL from env for the CLI backend', async () => {
+    process.env.GROK_CLI_MODEL = 'grok-composer-2.5-fast';
+    queueReadline(['2', '', 'y']);
+    captureStdout();
+    await runInit();
+
+    const claude = JSON.parse(await readFile(join(dir, '.claude.json'), 'utf8')) as {
+      mcpServers: Record<string, { env: Record<string, string> }>;
+    };
+    expect(claude.mcpServers.grok?.env.GROK_CLI_MODEL).toBe('grok-composer-2.5-fast');
   });
 });
 

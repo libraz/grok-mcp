@@ -15,24 +15,38 @@ const fakeClient = {
   getVideoStatus: vi.fn(),
 };
 
+const fakeCliClient = {
+  ask: vi.fn(),
+  listModels: vi.fn(),
+  generateImage: vi.fn(),
+  generateVideo: vi.fn(),
+  getVideoStatus: vi.fn(),
+};
+
 vi.mock('../src/grok.js', () => ({
   createGrokClient: vi.fn(() => fakeClient),
+}));
+
+vi.mock('../src/grok-cli.js', () => ({
+  createGrokCliClient: vi.fn(() => fakeCliClient),
 }));
 
 const { createServer } = await import('../src/server.js');
 
 const config: Config = {
+  backend: 'api',
   apiKey: 'xai-test',
   baseUrl: 'https://api.example/v1',
   defaultModel: 'grok-4.3',
   timeoutMs: 60_000,
   maxImageBytes: 20 * 1024 * 1024,
   maxVideoBytes: 50 * 1024 * 1024,
+  grokBin: 'grok',
 };
 
-const buildTools = (): Map<string, ToolCallback> => {
+const buildToolsFrom = (cfg: Config): Map<string, ToolCallback> => {
   const tools = new Map<string, ToolCallback>();
-  const server = createServer(config);
+  const server = createServer(cfg);
   const registry = (
     server as unknown as {
       _registeredTools: Record<
@@ -47,8 +61,10 @@ const buildTools = (): Map<string, ToolCallback> => {
   return tools;
 };
 
+const buildTools = (): Map<string, ToolCallback> => buildToolsFrom(config);
+
 beforeEach(() => {
-  for (const m of Object.values(fakeClient)) {
+  for (const m of [...Object.values(fakeClient), ...Object.values(fakeCliClient)]) {
     m.mockReset();
   }
 });
@@ -64,6 +80,22 @@ describe('createServer', () => {
       'grok_imagine_video_status',
       'grok_list_models',
     ]);
+  });
+});
+
+describe('backend selection', () => {
+  it('routes through the CLI client when backend is cli', async () => {
+    fakeCliClient.ask.mockResolvedValue('from cli');
+    const cb = buildToolsFrom({ ...config, backend: 'cli' }).get('grok_ask');
+    if (!cb) {
+      throw new Error('missing tool');
+    }
+
+    const r = await cb({ prompt: 'hi' });
+
+    expect(fakeCliClient.ask).toHaveBeenCalledWith({ prompt: 'hi' });
+    expect(fakeClient.ask).not.toHaveBeenCalled();
+    expect(r.content[0]?.text).toBe('from cli');
   });
 });
 
