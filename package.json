@@ -28,12 +28,13 @@
     "src",
     "tsconfig.json",
     "README.md",
+    "README_ja.md",
     "LICENSE"
   ],
   "engines": {
     "node": ">=20"
   },
-  "packageManager": "yarn@4.14.1",
+  "packageManager": "yarn@4.18.0",
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
@@ -49,22 +50,18 @@
     "prepublishOnly": "yarn build"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "mime-types": "^3.0.2",
-    "openai": "^6.37.0",
+    "openai": "^7.3.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.15",
+    "@biomejs/biome": "^2.5.6",
     "@types/mime-types": "^3.0.1",
-    "@types/node": "^25.7.0",
-    "@vitest/coverage-v8": "^4.1.6",
-    "npm-check-updates": "^22.2.0",
+    "@types/node": "^26.1.2",
+    "@vitest/coverage-v8": "^4.1.10",
+    "npm-check-updates": "^23.0.0",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.6"
-  },
-  "volta": {
-    "node": "22.22.2",
-    "yarn": "4.14.1"
+    "vitest": "^4.1.10"
   }
 }
