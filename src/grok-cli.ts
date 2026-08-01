@@ -51,7 +51,7 @@ const parseAskOutput = (stdout: string): string => {
  * Parse the `grok models` listing into sorted model IDs.
  *
  * The CLI prints one model per line prefixed with `*` (default) or `-`, e.g.
- * `  * grok-build (default)`. Header lines ("Available models:", login status)
+ * `  * grok-4.5 (default)`. Header lines ("Available models:", login status)
  * have no such prefix and are ignored.
  */
 const parseModelsOutput = (stdout: string): string[] => {
@@ -135,14 +135,19 @@ export const createGrokCliClient = (config: Config): GrokClient => {
     }
 
     const model = input.model ?? config.cliDefaultModel;
+    // "both" and `true` ask for X search too, which the CLI cannot do; they run as
+    // web-search-only rather than failing, unlike an explicit "x" (rejected above).
     const webSearch = input.search === 'web' || input.search === 'both' || input.search === true;
 
-    const args = ['--single', input.prompt, '--output-format', 'json'];
+    // Option values are passed in `--flag=value` form: the CLI rejects a separate
+    // value that starts with "-", which would otherwise break every prompt
+    // beginning with a hyphen.
+    const args = [`--single=${input.prompt}`, '--output-format', 'json'];
     if (model) {
-      args.push('--model', model);
+      args.push(`--model=${model}`);
     }
     if (input.system) {
-      args.push('--system-prompt-override', input.system);
+      args.push(`--system-prompt-override=${input.system}`);
     }
     if (!webSearch) {
       args.push('--disable-web-search');

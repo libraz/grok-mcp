@@ -30,7 +30,7 @@ const config: Config = {
   maxImageBytes: 20 * 1024 * 1024,
   maxVideoBytes: 50 * 1024 * 1024,
   grokBin: 'grok',
-  cliDefaultModel: 'grok-build',
+  cliDefaultModel: 'grok-4.5',
 };
 
 const ok = (stdout: string): { stdout: string; stderr: string } => ({ stdout, stderr: '' });
@@ -54,9 +54,8 @@ describe('grok-cli ask', () => {
     const [bin, , opts] = execFileMock.mock.calls[0] ?? [];
     expect(bin).toBe('grok');
     const args = argsOf();
-    expect(args.slice(0, 4)).toEqual(['--single', 'ping', '--output-format', 'json']);
-    expect(args).toContain('--model');
-    expect(args[args.indexOf('--model') + 1]).toBe('grok-build');
+    expect(args.slice(0, 3)).toEqual(['--single=ping', '--output-format', 'json']);
+    expect(args).toContain('--model=grok-4.5');
     // Search is off by default, so web search is disabled for a clean answer.
     expect(args).toContain('--disable-web-search');
     expect((opts as { cwd?: string }).cwd).toBeDefined();
@@ -69,9 +68,18 @@ describe('grok-cli ask', () => {
     await client.ask({ prompt: 'p', model: 'grok-x', system: 'be terse', search: 'web' });
 
     const args = argsOf();
-    expect(args[args.indexOf('--model') + 1]).toBe('grok-x');
-    expect(args[args.indexOf('--system-prompt-override') + 1]).toBe('be terse');
+    expect(args).toContain('--model=grok-x');
+    expect(args).toContain('--system-prompt-override=be terse');
     expect(args).not.toContain('--disable-web-search');
+  });
+
+  it('keeps a hyphen-leading prompt as the value of --single', async () => {
+    execFileMock.mockResolvedValue(ok(JSON.stringify({ text: 'ok' })));
+    const client = createGrokCliClient(config);
+
+    await client.ask({ prompt: '--version' });
+
+    expect(argsOf()[0]).toBe('--single=--version');
   });
 
   it('falls back to raw stdout when the output is not JSON', async () => {
@@ -149,20 +157,17 @@ describe('grok-cli listModels', () => {
         [
           'You are logged in with grok.com.',
           '',
-          'Default model: grok-build',
+          'Default model: grok-4.5',
           '',
           'Available models:',
-          '  - grok-composer-2.5-fast',
-          '  * grok-build (default)',
+          '  - grok-4.3',
+          '  * grok-4.5 (default)',
         ].join('\n'),
       ),
     );
     const client = createGrokCliClient(config);
 
-    expect((await client.listModels()).split('\n')).toEqual([
-      'grok-build',
-      'grok-composer-2.5-fast',
-    ]);
+    expect((await client.listModels()).split('\n')).toEqual(['grok-4.3', 'grok-4.5']);
     expect(argsOf()).toEqual(['models']);
   });
 

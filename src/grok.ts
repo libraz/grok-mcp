@@ -175,7 +175,14 @@ export const createGrokClient = (config: Config): GrokClient => {
       }
       throw new Error(`xAI API error: ${res.status} ${detail}`);
     }
-    return JSON.parse(text) as T;
+    try {
+      return JSON.parse(text) as T;
+    } catch {
+      // A 2xx with a non-JSON body usually means an intercepting proxy answered
+      // instead of xAI; surface that rather than a bare SyntaxError.
+      const body = text.trim().length > 0 ? `: ${text.slice(0, 200)}` : ' (empty body)';
+      throw new Error(`xAI API error: ${res.status} response was not JSON${body}`);
+    }
   };
 
   const ask = async (input: GrokAskInput): Promise<string> => {

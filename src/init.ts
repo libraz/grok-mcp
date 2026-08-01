@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { stdin, stdout } from 'node:process';
@@ -15,9 +15,6 @@ const PACKAGE_SPEC = 'github:libraz/grok-mcp';
 /** Default model id for the API backend when the user accepts the suggested value. */
 const DEFAULT_MODEL = 'grok-4.3';
 
-/** Default model id for the CLI backend. Matches the grok CLI's own default. */
-const DEFAULT_CLI_MODEL = 'grok-build';
-
 /** Shape of the `mcpServers.<name>` entry shared by Claude Code and Codex CLI. */
 type McpServerEntry = {
   command: string;
@@ -27,7 +24,8 @@ type McpServerEntry = {
 
 export type WriteConfigOptions = {
   backend: Backend;
-  model: string;
+  /** Model id to pin. Omitted for the CLI backend unless the user set `GROK_CLI_MODEL`. */
+  model?: string;
   apiKey?: string;
 };
 
@@ -40,17 +38,18 @@ type ClaudeConfig = {
 /**
  * Build the `env` map written into the generated config, keyed by backend.
  *
- * - `cli`: select the CLI backend and pin its default model; auth is handled by
- *   `grok login`, so no API key is written.
+ * - `cli`: select the CLI backend; auth is handled by `grok login`, so no API key is
+ *   written. `GROK_CLI_MODEL` is written only when a model was given — otherwise the
+ *   `grok` CLI's own default applies and keeps tracking its upgrades.
  * - `api`: pin the API default model, and include the API key only when the user
  *   opted into storing it.
  */
 const buildEnv = ({ backend, apiKey, model }: WriteConfigOptions): Record<string, string> =>
   backend === 'cli'
-    ? { XAI_BACKEND: 'cli', GROK_CLI_MODEL: model }
+    ? { XAI_BACKEND: 'cli', ...(model !== undefined && { GROK_CLI_MODEL: model }) }
     : {
         ...(apiKey !== undefined && { XAI_API_KEY: apiKey }),
-        XAI_DEFAULT_MODEL: model,
+        XAI_DEFAULT_MODEL: model ?? DEFAULT_MODEL,
       };
 
 const buildEntry = (options: WriteConfigOptions): McpServerEntry => ({
@@ -59,10 +58,43 @@ const buildEntry = (options: WriteConfigOptions): McpServerEntry => ({
   env: buildEnv(options),
 });
 
-const restrictFilePermissions = async (path: string): Promise<void> => {
-  await chmod(path, 0o600).catch(() => {
-    /* Best effort: some filesystems do not support POSIX permissions. */
-  });
+/** Permissions for a config file that holds an API key: owner read/write only. */
+const SECRET_FILE_MODE = 0o600;
+
+/**
+ * Decide the mode the rewritten file should end up with.
+ *
+ * Secret-bearing files are always locked down. Otherwise the existing file's mode
+ * is carried over, so replacing a file that a previous key-storing run restricted
+ * does not silently widen it back to the umask default.
+ */
+const targetFileMode = async (path: string, holdsSecret: boolean): Promise<number | undefined> => {
+  if (holdsSecret) {
+    return SECRET_FILE_MODE;
+  }
+  const stats = await stat(path).catch(() => null);
+  return stats ? stats.mode & 0o777 : undefined;
+};
+
+/**
+ * Write `data` to `path` via a sibling temp file and an atomic rename.
+ *
+ * Config files here can be large and actively used by a running client
+ * (`~/.claude.json` in particular), so a partial in-place write would corrupt
+ * them. Creating the temp file with `mode` also closes the window in which a
+ * freshly written API key would sit on disk under the umask default.
+ */
+const writeFileAtomic = async (path: string, data: string, mode?: number): Promise<void> => {
+  const tmp = `${path}.grok-mcp.tmp`;
+  try {
+    await writeFile(tmp, data, mode !== undefined ? { mode } : {});
+    await rename(tmp, path);
+  } catch (err) {
+    await unlink(tmp).catch(() => {
+      /* Best effort: nothing to clean up when the temp file was never created. */
+    });
+    throw err;
+  }
 };
 
 /**
@@ -89,18 +121,28 @@ export const writeClaudeConfig = async (
   data.mcpServers = data.mcpServers ?? {};
   data.mcpServers.grok = buildEntry(options);
   await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, `${JSON.stringify(data, null, 2)}\n`);
-  if (options.apiKey !== undefined) {
-    await restrictFilePermissions(path);
-  }
+  const mode = await targetFileMode(path, options.apiKey !== undefined);
+  await writeFileAtomic(path, `${JSON.stringify(data, null, 2)}\n`, mode);
 };
 
 const escapeTomlString = (s: string): string =>
   s.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
 
 /**
- * Remove an existing `[mcp_servers.grok]` block from a TOML document.
- * Stops skipping at the next `[section]` header. Lines after the block are kept as-is.
+ * Matches the `[mcp_servers.grok]` header and any of its sub-tables, e.g. the
+ * `[mcp_servers.grok.env]` form a hand-written Codex config may use. Leaving a
+ * sub-table behind would collide with the inline `env = { ... }` this module
+ * writes and make the whole config file invalid TOML.
+ */
+const CODEX_GROK_HEADER = /^[ \t]*\[mcp_servers\.grok(?:\.[^\]]+)?\][ \t]*$/;
+
+/** Same matcher applied line-by-line to a whole document. */
+const CODEX_GROK_HEADER_ANYWHERE = new RegExp(CODEX_GROK_HEADER.source, 'm');
+
+/**
+ * Remove an existing `[mcp_servers.grok]` block, and every `[mcp_servers.grok.*]`
+ * sub-table, from a TOML document. Stops skipping at the next unrelated
+ * `[section]` header. Lines outside those blocks are kept as-is.
  */
 const stripCodexGrokSection = (content: string): string => {
   const lines = content.split('\n');
@@ -108,7 +150,7 @@ const stripCodexGrokSection = (content: string): string => {
   let inGrok = false;
   for (const line of lines) {
     const trimmed = line.trim();
-    if (trimmed === '[mcp_servers.grok]') {
+    if (CODEX_GROK_HEADER.test(trimmed)) {
       inGrok = true;
       continue;
     }
@@ -148,10 +190,8 @@ export const writeCodexConfig = async (
     `env = { ${envPairs} }`,
   ].join('\n');
   await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, `${prefix}${block}\n`);
-  if (options.apiKey !== undefined) {
-    await restrictFilePermissions(path);
-  }
+  const mode = await targetFileMode(path, options.apiKey !== undefined);
+  await writeFileAtomic(path, `${prefix}${block}\n`, mode);
 };
 
 /**
@@ -188,7 +228,7 @@ export const previewWriteImpact = async (path: string): Promise<string> => {
   } catch {
     /* fall through to TOML heuristic */
   }
-  return /^\[mcp_servers\.grok\]\s*$/m.test(raw) ? '(replace grok)' : '(merge)';
+  return CODEX_GROK_HEADER_ANYWHERE.test(raw) ? '(replace grok)' : '(merge)';
 };
 
 /**
@@ -208,7 +248,7 @@ export const previewRemoveImpact = async (path: string): Promise<string> => {
   } catch {
     /* fall through to TOML heuristic */
   }
-  return /^\[mcp_servers\.grok\]\s*$/m.test(raw) ? '(remove grok)' : '(no grok; skip)';
+  return CODEX_GROK_HEADER_ANYWHERE.test(raw) ? '(remove grok)' : '(no grok; skip)';
 };
 
 /** Outcome of attempting to remove the grok entry from a config file. */
@@ -239,7 +279,8 @@ export const removeFromClaudeConfig = async (path: string): Promise<RemoveOutcom
     return 'absent';
   }
   delete data.mcpServers.grok;
-  await writeFile(path, `${JSON.stringify(data, null, 2)}\n`);
+  const mode = await targetFileMode(path, false);
+  await writeFileAtomic(path, `${JSON.stringify(data, null, 2)}\n`, mode);
   return 'removed';
 };
 
@@ -252,11 +293,12 @@ export const removeFromCodexConfig = async (path: string): Promise<RemoveOutcome
     return 'no-file';
   }
   const existing = await readFile(path, 'utf8');
-  if (!/^\[mcp_servers\.grok\]\s*$/m.test(existing)) {
+  if (!CODEX_GROK_HEADER_ANYWHERE.test(existing)) {
     return 'absent';
   }
   const stripped = stripCodexGrokSection(existing).replace(/\n*$/, '');
-  await writeFile(path, stripped.length > 0 ? `${stripped}\n` : '');
+  const mode = await targetFileMode(path, false);
+  await writeFileAtomic(path, stripped.length > 0 ? `${stripped}\n` : '', mode);
   return 'removed';
 };
 
@@ -414,10 +456,10 @@ export const runInit = async (): Promise<void> => {
     const backend = await promptBackend(rl);
     stdout.write('\n');
 
-    let model: string;
+    let model: string | undefined;
     let apiKey: string | undefined;
     if (backend === 'cli') {
-      model = process.env.GROK_CLI_MODEL?.trim() || DEFAULT_CLI_MODEL;
+      model = process.env.GROK_CLI_MODEL?.trim() || undefined;
     } else {
       model = process.env.XAI_DEFAULT_MODEL?.trim() || DEFAULT_MODEL;
       const shouldStoreApiKey = await promptYesNo(

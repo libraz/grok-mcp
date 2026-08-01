@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -42,6 +42,23 @@ describe('writeClaudeConfig', () => {
     expect(parsed.mcpServers.grok?.command).toBe('npx');
     expect(parsed.mcpServers.grok?.env.XAI_API_KEY).toBe('xai-test');
     expect(parsed.mcpServers.grok?.env.XAI_DEFAULT_MODEL).toBe('grok-4.3');
+  });
+
+  it('restricts permissions on a config that stores the API key', async () => {
+    const path = join(dir, '.claude.json');
+    await writeClaudeConfig(path, { backend: 'api', apiKey: 'xai-test' });
+
+    expect((await stat(path)).mode & 0o777).toBe(0o600);
+    expect(await readdir(dir)).toEqual(['.claude.json']);
+  });
+
+  it('keeps the existing mode when no API key is stored', async () => {
+    const path = join(dir, '.claude.json');
+    await writeFile(path, '{}\n', { mode: 0o600 });
+
+    await writeClaudeConfig(path, { backend: 'api', model: 'grok-4.3' });
+
+    expect((await stat(path)).mode & 0o777).toBe(0o600);
   });
 
   it('preserves other servers and unrelated top-level keys', async () => {
@@ -164,6 +181,33 @@ describe('writeCodexConfig', () => {
     expect(text).toContain('XAI_API_KEY = "xai-new"');
     expect(text).toContain('[mcp_servers.other]');
     expect(text).toContain('command = "keep"');
+  });
+
+  it('strips [mcp_servers.grok.env] sub-tables so the result stays valid TOML', async () => {
+    const path = join(dir, 'config.toml');
+    await writeFile(
+      path,
+      [
+        '[mcp_servers.grok]',
+        'command = "old"',
+        '',
+        '[mcp_servers.grok.env]',
+        'XAI_BACKEND = "cli"',
+        '',
+        '[mcp_servers.other]',
+        'command = "keep"',
+        '',
+      ].join('\n'),
+    );
+
+    await writeCodexConfig(path, { backend: 'cli' });
+
+    const text = await readFile(path, 'utf8');
+    // A leftover sub-table would collide with the inline env = { ... } below it.
+    expect(text).not.toContain('[mcp_servers.grok.env]');
+    expect(text).toContain('[mcp_servers.other]');
+    expect(text).toContain('command = "keep"');
+    expect(text).toContain('env = { XAI_BACKEND = "cli" }');
   });
 
   it('escapes double quotes and backslashes in values', async () => {
@@ -380,6 +424,30 @@ describe('removeFromCodexConfig', () => {
     expect(after).toContain('command = "keep"');
   });
 
+  it('removes [mcp_servers.grok.env] sub-tables too', async () => {
+    const path = join(dir, 'config.toml');
+    await writeFile(
+      path,
+      [
+        '[mcp_servers.grok]',
+        'command = "npx"',
+        '',
+        '[mcp_servers.grok.env]',
+        'XAI_BACKEND = "cli"',
+        '',
+        '[mcp_servers.another]',
+        'command = "keep"',
+        '',
+      ].join('\n'),
+    );
+
+    expect(await removeFromCodexConfig(path)).toBe('removed');
+
+    const after = await readFile(path, 'utf8');
+    expect(after).not.toContain('mcp_servers.grok');
+    expect(after).toContain('[mcp_servers.another]');
+  });
+
   it('writes an empty file when the only section was grok', async () => {
     const path = join(dir, 'config.toml');
     const block = ['[mcp_servers.grok]', 'command = "npx"', 'args = ["-y", "x"]', ''].join('\n');
@@ -553,18 +621,19 @@ describe('runInit', () => {
       mcpServers: Record<string, { env: Record<string, string> }>;
     };
     expect(claude.mcpServers.grok?.env.XAI_BACKEND).toBe('cli');
-    expect(claude.mcpServers.grok?.env.GROK_CLI_MODEL).toBe('grok-build');
+    // No model is pinned, so the grok CLI's own default applies.
+    expect(claude.mcpServers.grok?.env.GROK_CLI_MODEL).toBeUndefined();
     expect(claude.mcpServers.grok?.env.XAI_API_KEY).toBeUndefined();
     expect(claude.mcpServers.grok?.env.XAI_DEFAULT_MODEL).toBeUndefined();
 
     const codex = await readFile(join(dir, '.codex', 'config.toml'), 'utf8');
     expect(codex).toContain('XAI_BACKEND = "cli"');
-    expect(codex).toContain('GROK_CLI_MODEL = "grok-build"');
+    expect(codex).not.toContain('GROK_CLI_MODEL');
     expect(codex).not.toContain('XAI_API_KEY');
   });
 
   it('honours GROK_CLI_MODEL from env for the CLI backend', async () => {
-    process.env.GROK_CLI_MODEL = 'grok-composer-2.5-fast';
+    process.env.GROK_CLI_MODEL = 'grok-4.5';
     queueReadline(['2', '', 'y']);
     captureStdout();
     await runInit();
@@ -572,7 +641,7 @@ describe('runInit', () => {
     const claude = JSON.parse(await readFile(join(dir, '.claude.json'), 'utf8')) as {
       mcpServers: Record<string, { env: Record<string, string> }>;
     };
-    expect(claude.mcpServers.grok?.env.GROK_CLI_MODEL).toBe('grok-composer-2.5-fast');
+    expect(claude.mcpServers.grok?.env.GROK_CLI_MODEL).toBe('grok-4.5');
   });
 });
 
