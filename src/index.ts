@@ -3,8 +3,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { loadConfig } from './config.js';
 import { runInit, runUninstall } from './init.js';
 import { createServer } from './server.js';
-
-const PACKAGE_VERSION = '0.1.0';
+import { PACKAGE_VERSION } from './version.js';
 
 const HELP = `grok-mcp ${PACKAGE_VERSION}
 MCP server exposing xAI Grok API.
@@ -37,7 +36,7 @@ Optional environment:
   XAI_MAX_IMAGE_MB         Max image size for base64 encoding (default: 20)
   XAI_MAX_VIDEO_MB         (Reserved, no video input is documented by xAI yet)
   GROK_BIN                 Path to the grok CLI binary (cli backend; default: grok)
-  GROK_CLI_MODEL           Default model id for cli backend (e.g. grok-build)
+  GROK_CLI_MODEL           Default model id for cli backend (default: the CLI's own)
 
 Docs: https://github.com/libraz/grok-mcp
 `;

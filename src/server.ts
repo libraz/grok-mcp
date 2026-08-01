@@ -11,8 +11,7 @@ import {
   grokListModelsInputSchema,
   grokVideoStatusInputSchema,
 } from './schema.js';
-
-const PACKAGE_VERSION = '0.1.0';
+import { PACKAGE_VERSION } from './version.js';
 
 type ToolResult = {
   content: { type: 'text'; text: string }[];

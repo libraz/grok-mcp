@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Config } from '../src/config.js';
 
@@ -80,6 +81,14 @@ describe('createServer', () => {
       'grok_imagine_video_status',
       'grok_list_models',
     ]);
+  });
+
+  it('reports the package.json version', async () => {
+    const { PACKAGE_VERSION } = await import('../src/version.js');
+    const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')) as {
+      version: string;
+    };
+    expect(PACKAGE_VERSION).toBe(pkg.version);
   });
 });
 
