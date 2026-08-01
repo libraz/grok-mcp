@@ -208,6 +208,26 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@libraz/grok-mcp@workspace:.":
+  version: 0.0.0-use.local
+  resolution: "@libraz/grok-mcp@workspace:."
+  dependencies:
+    "@biomejs/biome": "npm:^2.5.6"
+    "@modelcontextprotocol/sdk": "npm:^1.30.0"
+    "@types/mime-types": "npm:^3.0.1"
+    "@types/node": "npm:^26.1.2"
+    "@vitest/coverage-v8": "npm:^4.1.10"
+    mime-types: "npm:^3.0.2"
+    npm-check-updates: "npm:^23.0.0"
+    openai: "npm:^7.3.0"
+    typescript: "npm:^6.0.3"
+    vitest: "npm:^4.1.10"
+    zod: "npm:^4.4.3"
+  bin:
+    grok-mcp: ./dist/index.js
+  languageName: unknown
+  linkType: soft
+
 "@modelcontextprotocol/sdk@npm:^1.30.0":
   version: 1.30.0
   resolution: "@modelcontextprotocol/sdk@npm:1.30.0"
@@ -1046,26 +1066,6 @@ __metadata:
   checksum: 10c0/386d011a553e02bc594ac2ca0bd6d9e4c22d7fa8cfbfc448a6d148c59ea881b092db9dbe3547ae4b88e55f1b01f7c4a2ecc53b310c042793e63aa44cf6c257f2
   languageName: node
   linkType: hard
-
-"grok-mcp@workspace:.":
-  version: 0.0.0-use.local
-  resolution: "grok-mcp@workspace:."
-  dependencies:
-    "@biomejs/biome": "npm:^2.5.6"
-    "@modelcontextprotocol/sdk": "npm:^1.30.0"
-    "@types/mime-types": "npm:^3.0.1"
-    "@types/node": "npm:^26.1.2"
-    "@vitest/coverage-v8": "npm:^4.1.10"
-    mime-types: "npm:^3.0.2"
-    npm-check-updates: "npm:^23.0.0"
-    openai: "npm:^7.3.0"
-    typescript: "npm:^6.0.3"
-    vitest: "npm:^4.1.10"
-    zod: "npm:^4.4.3"
-  bin:
-    grok-mcp: ./dist/index.js
-  languageName: unknown
-  linkType: soft
 
 "has-flag@npm:^4.0.0":
   version: 4.0.0

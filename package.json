@@ -1,6 +1,6 @@
 {
-  "name": "grok-mcp",
-  "version": "0.2.0",
+  "name": "@libraz/grok-mcp",
+  "version": "0.3.0",
   "description": "MCP server that exposes xAI Grok API to Claude Code, Codex CLI, and other MCP-capable clients.",
   "keywords": [
     "mcp",
@@ -35,6 +35,9 @@
     "node": ">=20"
   },
   "packageManager": "yarn@4.18.0",
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",

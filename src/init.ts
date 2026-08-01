@@ -6,11 +6,8 @@ import { stdin, stdout } from 'node:process';
 import { createInterface, type Interface as ReadlineInterface } from 'node:readline/promises';
 import type { Backend } from './config.js';
 
-/**
- * Package specifier written into generated config snippets.
- * Update to `grok-mcp` once the package is published to npm.
- */
-const PACKAGE_SPEC = 'github:libraz/grok-mcp';
+/** Package specifier written into generated config snippets. */
+const PACKAGE_SPEC = '@libraz/grok-mcp';
 
 /** Default model id for the API backend when the user accepts the suggested value. */
 const DEFAULT_MODEL = 'grok-4.3';

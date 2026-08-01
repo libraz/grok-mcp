@@ -3,7 +3,7 @@
 xAI Grok API のための MCP サーバ。Claude Code・Codex CLI など [MCP](https://modelcontextprotocol.io/) 対応の任意のクライアントから利用できる。
 
 [![CI](https://img.shields.io/github/actions/workflow/status/libraz/grok-mcp/ci.yml?branch=main&label=CI)](https://github.com/libraz/grok-mcp/actions)
-[![npm version](https://img.shields.io/npm/v/grok-mcp.svg)](https://www.npmjs.com/package/grok-mcp)
+[![npm version](https://img.shields.io/npm/v/@libraz/grok-mcp.svg)](https://www.npmjs.com/package/@libraz/grok-mcp)
 [![codecov](https://codecov.io/gh/libraz/grok-mcp/branch/main/graph/badge.svg)](https://codecov.io/gh/libraz/grok-mcp)
 [![License](https://img.shields.io/badge/license-MIT-blue)](https://github.com/libraz/grok-mcp/blob/main/LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
@@ -49,7 +49,7 @@ xAI API キーが必要。[console.x.ai](https://console.x.ai) で発行する�
 
 ```bash
 export XAI_API_KEY="xai-..."
-npx -y github:libraz/grok-mcp init
+npx -y @libraz/grok-mcp init
 ```
 
 対話セットアップは選択したクライアント設定に MCP サーバエントリを書き込む。デフォルトでは `XAI_API_KEY` を設定ファイルに保存しない。MCP クライアントを起動する環境でキーを管理すること。`init` 中に明示的に保存を選んだ場合だけ、キーが設定ファイルへ書かれる（対応するファイルシステムでは user-only 権限に制限する）。
@@ -70,12 +70,12 @@ npx -y github:libraz/grok-mcp init
 
 ```bash
 grok login          # 初回のみ OAuth / サブスクのサインイン
-npx -y github:libraz/grok-mcp init
+npx -y @libraz/grok-mcp init
 ```
 
 API キーの入力・保存は行われず、`init` は選択した設定に `XAI_BACKEND=cli` を書き込む。環境変数 `GROK_CLI_MODEL` が設定されていない限りモデルは固定せず、`grok` CLI 自身の既定モデルに従う。起動環境の `PATH` に `grok` が無い場合は `GROK_BIN` でバイナリのパスを指定する。
 
-アンインストールしたい場合は `npx -y github:libraz/grok-mcp uninstall` を実行。`grok` エントリだけが削除され、他のサーバは残る。
+アンインストールしたい場合は `npx -y @libraz/grok-mcp uninstall` を実行。`grok` エントリだけが削除され、他のサーバは残る。
 
 ### 手動セットアップ
 
@@ -88,7 +88,7 @@ Claude Code (`~/.claude.json` または `.mcp.json`):
   "mcpServers": {
     "grok": {
       "command": "npx",
-      "args": ["-y", "github:libraz/grok-mcp"],
+      "args": ["-y", "@libraz/grok-mcp"],
       "env": {
         "XAI_DEFAULT_MODEL": "grok-4.3"
       }
@@ -102,13 +102,11 @@ Codex CLI (`~/.codex/config.toml`):
 ```toml
 [mcp_servers.grok]
 command = "npx"
-args = ["-y", "github:libraz/grok-mcp"]
+args = ["-y", "@libraz/grok-mcp"]
 env = { XAI_DEFAULT_MODEL = "grok-4.3" }
 ```
 
 平文 secret を MCP クライアント設定に保存してよい場合だけ、`XAI_API_KEY = "xai-..."` を追加する。
-
-npm 公開後は `github:` プレフィックスを外して利用可能。
 
 ## 設定
 
