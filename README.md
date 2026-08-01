@@ -3,7 +3,6 @@
 MCP server for the xAI Grok API. Works with Claude Code, Codex CLI, and any other [MCP](https://modelcontextprotocol.io/)-capable client.
 
 [![CI](https://img.shields.io/github/actions/workflow/status/libraz/grok-mcp/ci.yml?branch=main&label=CI)](https://github.com/libraz/grok-mcp/actions)
-[![npm version](https://img.shields.io/npm/v/@libraz/grok-mcp.svg)](https://www.npmjs.com/package/@libraz/grok-mcp)
 [![codecov](https://codecov.io/gh/libraz/grok-mcp/branch/main/graph/badge.svg)](https://codecov.io/gh/libraz/grok-mcp)
 [![License](https://img.shields.io/badge/license-MIT-blue)](https://github.com/libraz/grok-mcp/blob/main/LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
@@ -49,7 +48,7 @@ You need an xAI API key — get one at [console.x.ai](https://console.x.ai). The
 
 ```bash
 export XAI_API_KEY="xai-..."
-npx -y @libraz/grok-mcp init
+npx -y github:libraz/grok-mcp init
 ```
 
 The interactive setup writes the MCP server entry into your selected client configs. By default it does **not** store `XAI_API_KEY` in those files; keep the key in the environment used to launch your MCP client. If you explicitly opt into storing the key during `init`, the generated config file is restricted to user-only permissions where the filesystem supports it.
@@ -70,12 +69,12 @@ Install the `grok` CLI and sign in, then run `init` and choose backend **2) grok
 
 ```bash
 grok login          # one-time OAuth / subscription sign-in
-npx -y @libraz/grok-mcp init
+npx -y github:libraz/grok-mcp init
 ```
 
 No API key is requested or stored — `init` writes `XAI_BACKEND=cli` into the selected configs. No model is pinned unless `GROK_CLI_MODEL` is already set in the environment, so the `grok` CLI's own default model applies. Override the binary location with `GROK_BIN` if `grok` is not on the launch environment's `PATH`.
 
-To remove the entry later, run `npx -y @libraz/grok-mcp uninstall` — it drops only the `grok` server, other entries are kept.
+To remove the entry later, run `npx -y github:libraz/grok-mcp uninstall` — it drops only the `grok` server, other entries are kept.
 
 ### Manual setup
 
@@ -88,7 +87,7 @@ Claude Code (`~/.claude.json` or `.mcp.json`):
   "mcpServers": {
     "grok": {
       "command": "npx",
-      "args": ["-y", "@libraz/grok-mcp"],
+      "args": ["-y", "github:libraz/grok-mcp"],
       "env": {
         "XAI_DEFAULT_MODEL": "grok-4.3"
       }
@@ -102,7 +101,7 @@ Codex CLI (`~/.codex/config.toml`):
 ```toml
 [mcp_servers.grok]
 command = "npx"
-args = ["-y", "@libraz/grok-mcp"]
+args = ["-y", "github:libraz/grok-mcp"]
 env = { XAI_DEFAULT_MODEL = "grok-4.3" }
 ```
 

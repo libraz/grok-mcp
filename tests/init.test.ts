@@ -40,7 +40,7 @@ describe('writeClaudeConfig', () => {
       mcpServers: Record<string, { command: string; args: string[]; env: Record<string, string> }>;
     };
     expect(parsed.mcpServers.grok?.command).toBe('npx');
-    expect(parsed.mcpServers.grok?.args).toEqual(['-y', '@libraz/grok-mcp']);
+    expect(parsed.mcpServers.grok?.args).toEqual(['-y', 'github:libraz/grok-mcp']);
     expect(parsed.mcpServers.grok?.env.XAI_API_KEY).toBe('xai-test');
     expect(parsed.mcpServers.grok?.env.XAI_DEFAULT_MODEL).toBe('grok-4.3');
   });
@@ -137,7 +137,7 @@ describe('writeCodexConfig', () => {
     const text = await readFile(path, 'utf8');
     expect(text).toContain('[mcp_servers.grok]');
     expect(text).toContain('command = "npx"');
-    expect(text).toContain('args = ["-y", "@libraz/grok-mcp"]');
+    expect(text).toContain('args = ["-y", "github:libraz/grok-mcp"]');
     expect(text).toContain('XAI_API_KEY = "xai-test"');
     expect(text).toContain('XAI_DEFAULT_MODEL = "grok-4.3"');
   });
@@ -408,7 +408,7 @@ describe('removeFromCodexConfig', () => {
         '',
         '[mcp_servers.grok]',
         'command = "npx"',
-        'args = ["-y", "@libraz/grok-mcp"]',
+        'args = ["-y", "github:libraz/grok-mcp"]',
         '',
         '[mcp_servers.another]',
         'command = "keep"',
