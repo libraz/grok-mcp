@@ -70,10 +70,10 @@ describe('loadConfig', () => {
     const config = loadConfig({
       XAI_BACKEND: 'cli',
       GROK_BIN: '/opt/grok/bin/grok',
-      GROK_CLI_MODEL: 'grok-build',
+      GROK_CLI_MODEL: 'grok-4.5',
     });
     expect(config.grokBin).toBe('/opt/grok/bin/grok');
-    expect(config.cliDefaultModel).toBe('grok-build');
+    expect(config.cliDefaultModel).toBe('grok-4.5');
   });
 
   it('accepts case-insensitive backend values', () => {

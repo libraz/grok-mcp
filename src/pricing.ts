@@ -33,9 +33,26 @@ export type ModelPricing =
   | ({ kind: 'video-gen' } & VideoGenPricing);
 
 /** ISO date on which the embedded pricing table was last reconciled with xAI docs. */
-export const PRICING_LAST_VERIFIED = '2026-05-13';
+export const PRICING_LAST_VERIFIED = '2026-08-01';
 
+/**
+ * Prompt size, in tokens, at which xAI switches a request to long-context rates.
+ * Once the prompt reaches it, every token of the request bills at the higher tier.
+ */
+export const LONG_CONTEXT_THRESHOLD_TOKENS = 200_000;
+
+/**
+ * Standard-tier rates. Text models also have a long-context tier (see
+ * {@link LONG_CONTEXT_THRESHOLD_TOKENS}) that is roughly double these numbers;
+ * estimates always use the standard tier and say so in their notes.
+ */
 export const MODEL_PRICING: Record<string, ModelPricing> = {
+  'grok-4.5': {
+    kind: 'text',
+    inputPerMillion: 2.0,
+    outputPerMillion: 6.0,
+    contextTokens: 500_000,
+  },
   'grok-4.3': {
     kind: 'text',
     inputPerMillion: 1.25,
@@ -46,72 +63,30 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
     kind: 'text',
     inputPerMillion: 1.25,
     outputPerMillion: 2.5,
-    contextTokens: 2_000_000,
+    contextTokens: 1_000_000,
   },
   'grok-4.20-0309-non-reasoning': {
     kind: 'text',
     inputPerMillion: 1.25,
     outputPerMillion: 2.5,
-    contextTokens: 2_000_000,
-  },
-  'grok-4-1-fast-reasoning': {
-    kind: 'text',
-    inputPerMillion: 0.2,
-    outputPerMillion: 0.5,
-    contextTokens: 2_000_000,
-  },
-  'grok-4-1-fast-non-reasoning': {
-    kind: 'text',
-    inputPerMillion: 0.2,
-    outputPerMillion: 0.5,
-    contextTokens: 2_000_000,
+    contextTokens: 1_000_000,
   },
   'grok-4.20-multi-agent-0309': {
     kind: 'text',
     inputPerMillion: 1.25,
     outputPerMillion: 2.5,
-    contextTokens: 2_000_000,
+    contextTokens: 1_000_000,
   },
-  'grok-4-0709': {
+  'grok-build-0.1': {
     kind: 'text',
-    inputPerMillion: 3.0,
-    outputPerMillion: 15.0,
-    contextTokens: 256_000,
-  },
-  'grok-4-fast-reasoning': {
-    kind: 'text',
-    inputPerMillion: 0.2,
-    outputPerMillion: 0.5,
-    contextTokens: 2_000_000,
-  },
-  'grok-4-fast-non-reasoning': {
-    kind: 'text',
-    inputPerMillion: 0.2,
-    outputPerMillion: 0.5,
-    contextTokens: 2_000_000,
-  },
-  'grok-3': {
-    kind: 'text',
-    inputPerMillion: 3.0,
-    outputPerMillion: 15.0,
-    contextTokens: 131_072,
-  },
-  'grok-3-mini': {
-    kind: 'text',
-    inputPerMillion: 0.3,
-    outputPerMillion: 0.5,
-    contextTokens: 131_072,
-  },
-  'grok-code-fast-1': {
-    kind: 'text',
-    inputPerMillion: 0.2,
-    outputPerMillion: 1.5,
+    inputPerMillion: 1.0,
+    outputPerMillion: 2.0,
     contextTokens: 256_000,
   },
   'grok-imagine-image': { kind: 'image-gen', perImage: 0.02 },
   'grok-imagine-image-quality': { kind: 'image-gen', perImage: 0.05 },
-  'grok-imagine-image-pro': { kind: 'image-gen', perImage: 0.07 },
   'grok-imagine-video': { kind: 'video-gen', perSecond: 0.05 },
+  'grok-imagine-video-1.5': { kind: 'video-gen', perSecond: 0.08 },
 };
 
 /** Input to {@link estimateCost}. Only the fields relevant to the model's kind are used. */
@@ -179,6 +154,9 @@ export const estimateCost = (input: EstimateInput): EstimateResult => {
   if (pricing.kind === 'text') {
     const inTok = input.inputTokens ?? 0;
     const outTok = input.outputTokens ?? 0;
+    notes.push(
+      `Standard-tier rates. Prompts of ${LONG_CONTEXT_THRESHOLD_TOKENS.toLocaleString()} tokens or more bill at xAI's long-context rates (about double), which this estimate does not apply.`,
+    );
     const inCost = (inTok / 1_000_000) * pricing.inputPerMillion;
     const outCost = (outTok / 1_000_000) * pricing.outputPerMillion;
     total = inCost + outCost;

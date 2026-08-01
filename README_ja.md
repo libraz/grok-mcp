@@ -2,12 +2,12 @@
 
 xAI Grok API のための MCP サーバ。Claude Code・Codex CLI など [MCP](https://modelcontextprotocol.io/) 対応の任意のクライアントから利用できる。
 
-[![CI](https://github.com/libraz/grok-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/libraz/grok-mcp/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/libraz/grok-mcp/branch/main/graph/badge.svg)](https://codecov.io/gh/libraz/grok-mcp)
+[![CI](https://img.shields.io/github/actions/workflow/status/libraz/grok-mcp/ci.yml?branch=main&label=CI)](https://github.com/libraz/grok-mcp/actions)
 [![npm version](https://img.shields.io/npm/v/grok-mcp.svg)](https://www.npmjs.com/package/grok-mcp)
+[![codecov](https://codecov.io/gh/libraz/grok-mcp/branch/main/graph/badge.svg)](https://codecov.io/gh/libraz/grok-mcp)
+[![License](https://img.shields.io/badge/license-MIT-blue)](https://github.com/libraz/grok-mcp/blob/main/LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-%E2%89%A520-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ## 背景
 
@@ -32,13 +32,14 @@ Claude Code・Codex CLI はすでに MCP に対応しているので、Grok を 
 |---|---|---|
 | 認証 | `XAI_API_KEY` | `grok login`（OAuth / サブスク）— キー不要 |
 | 経路 | xAI REST API | ローカルの `grok` CLI をサブプロセス実行 |
-| モデル | `grok-4.3` 等（`grok_list_models`） | `grok-build`・`grok-composer-2.5-fast` 等 |
+| モデル | `grok-4.5`・`grok-4.3` 等（`grok_list_models`） | サインイン中のプランで使えるもの（`grok models`） |
 | テキスト（`grok_ask`） | ✅ | ✅ |
+| 画像入力（`grok_ask` の `images`） | ✅ | ❌ |
 | Web 検索 | ✅ | ✅（`search: "web"` / `"both"` / `true`） |
 | X（Twitter）検索 | ✅ | ❌ |
 | 画像 / 動画生成 | ✅ | ❌ |
 
-すでに [grok CLI](https://github.com/xai-org/grok-cli) 経由で Grok を契約していて、API トークン課金を避けたい場合は `cli` モードが便利。テキスト専用で、`grok_imagine_*` や X 検索は `api` モードへ誘導する明確なエラーを返す。`grok_ask` は副作用のない単発の質問応答にするため、一時ディレクトリで単発プロンプトとして実行する（プロジェクトファイルを読まず、Web 検索は要求時のみ有効）。
+すでに [grok CLI](https://github.com/xai-org/grok-cli) 経由で Grok を契約していて、API トークン課金を避けたい場合は `cli` モードが便利。テキスト専用で、`grok_imagine_*`・画像入力・X 検索は `api` モードへ誘導する明確なエラーを返す。`grok_ask` は副作用のない単発の質問応答にするため、一時ディレクトリで単発プロンプトとして実行する（プロジェクトファイルを読まず、Web 検索は要求時のみ有効）。
 
 ## クイックスタート
 
@@ -72,7 +73,7 @@ grok login          # 初回のみ OAuth / サブスクのサインイン
 npx -y github:libraz/grok-mcp init
 ```
 
-API キーの入力・保存は行われず、`init` は選択した設定に `XAI_BACKEND=cli`（および `GROK_CLI_MODEL`、既定 `grok-build`）を書き込む。起動環境の `PATH` に `grok` が無い場合は `GROK_BIN` でバイナリのパスを指定する。
+API キーの入力・保存は行われず、`init` は選択した設定に `XAI_BACKEND=cli` を書き込む。環境変数 `GROK_CLI_MODEL` が設定されていない限りモデルは固定せず、`grok` CLI 自身の既定モデルに従う。起動環境の `PATH` に `grok` が無い場合は `GROK_BIN` でバイナリのパスを指定する。
 
 アンインストールしたい場合は `npx -y github:libraz/grok-mcp uninstall` を実行。`grok` エントリだけが削除され、他のサーバは残る。
 
@@ -120,7 +121,7 @@ npm 公開後は `github:` プレフィックスを外して利用可能。
 | `XAI_TIMEOUT_MS` | `120000` | リクエスト / 動画 polling / CLI のタイムアウト |
 | `XAI_MAX_IMAGE_MB` | `20` | 画像サイズ上限 |
 | `GROK_BIN` | `grok` | `grok` CLI バイナリのパス（`cli`） |
-| `GROK_CLI_MODEL` | — | `grok` CLI に渡す既定モデル（`cli`） |
+| `GROK_CLI_MODEL` | —（CLI 自身の既定） | `grok` CLI に渡す既定モデル（`cli`） |
 
 ## ツール詳細
 
@@ -145,7 +146,7 @@ npm 公開後は `github:` プレフィックスを外して利用可能。
 ```jsonc
 {
   "prompt": "A collage of London landmarks in a stenciled street-art style",
-  "model": "grok-imagine-image-quality",   // image / image-quality / image-pro
+  "model": "grok-imagine-image-quality",   // 任意、image / image-quality、既定は grok-imagine-image-quality
   "n": 1,
   "aspect_ratio": "16:9",
   "source_images": []                       // 編集時のみ（最大 3 枚）
@@ -159,7 +160,7 @@ npm 公開後は `github:` プレフィックスを外して利用可能。
 ```jsonc
 {
   "prompt": "Cinematic drone shot over a coastal town at sunset",
-  "model": "grok-imagine-video",   // 任意、既定は grok-imagine-video
+  "model": "grok-imagine-video",   // 任意、video / video-1.5、既定は grok-imagine-video
   "duration": 6,
   "aspect_ratio": "16:9",
   "resolution": "720p",
@@ -177,7 +178,7 @@ npm 公開後は `github:` プレフィックスを外して利用可能。
 { "model": "grok-imagine-video", "video_seconds": 10 }
 ```
 
-静的な価格スナップショット（2026-05-13）を使用。最新料金は [docs.x.ai/developers/models](https://docs.x.ai/developers/models) で確認。
+静的な価格スナップショット（2026-08-01）を使用。収録しているのは標準ティアの単価で、プロンプトが 200,000 トークン以上になると適用されるロングコンテキスト料金は反映されない。最新料金は [docs.x.ai/developers/models](https://docs.x.ai/developers/models) で確認。
 
 ## ライセンス
 

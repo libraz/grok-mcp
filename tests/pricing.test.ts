@@ -14,14 +14,19 @@ describe('estimateCost', () => {
     expect(r.notes[0]).toMatch(/Pricing snapshot/);
   });
 
-  it('computes text-model cost for the cheaper grok-4-1-fast tier', () => {
+  it('computes text-model cost for grok-4.5', () => {
     const r = estimateCost({
-      model: 'grok-4-1-fast-non-reasoning',
+      model: 'grok-4.5',
       inputTokens: 10_000,
       outputTokens: 2_000,
     });
     expect(r.knownPricing).toBe(true);
-    expect(r.costUsd).toBeCloseTo((10_000 / 1_000_000) * 0.2 + (2_000 / 1_000_000) * 0.5, 8);
+    expect(r.costUsd).toBeCloseTo((10_000 / 1_000_000) * 2.0 + (2_000 / 1_000_000) * 6.0, 8);
+  });
+
+  it('warns that long-context requests bill at a higher tier', () => {
+    const r = estimateCost({ model: 'grok-4.5', inputTokens: 300_000 });
+    expect(r.notes.some((n) => n.includes('long-context'))).toBe(true);
   });
 
   it('treats missing token counts as zero', () => {
@@ -37,8 +42,13 @@ describe('estimateCost', () => {
   });
 
   it('computes image-gen cost for multiple images', () => {
-    const r = estimateCost({ model: 'grok-imagine-image-pro', imageCount: 4 });
-    expect(r.costUsd).toBeCloseTo(0.07 * 4, 6);
+    const r = estimateCost({ model: 'grok-imagine-image', imageCount: 4 });
+    expect(r.costUsd).toBeCloseTo(0.02 * 4, 6);
+  });
+
+  it('computes video-gen cost for the 1.5 model', () => {
+    const r = estimateCost({ model: 'grok-imagine-video-1.5', videoSeconds: 10 });
+    expect(r.costUsd).toBeCloseTo(0.08 * 10, 6);
   });
 
   it('computes video-gen cost by seconds', () => {

@@ -26,7 +26,8 @@ export const grokAskInputSchema = {
     .describe(
       'Enable xAI server-side search via the Responses API. ' +
         '`"x"` enables X (Twitter) realtime search, `"web"` enables web search, ' +
-        '`true` or `"both"` enables both.',
+        '`true` or `"both"` enables both. With the cli backend X search is unavailable: ' +
+        '`"x"` is rejected and `true` / `"both"` run web search only.',
     ),
 };
 
@@ -52,8 +53,7 @@ export const grokGenerateImageInputSchema = {
     .optional()
     .describe(
       'Image generation model. One of: grok-imagine-image ($0.02/img), ' +
-        'grok-imagine-image-quality ($0.05/img), grok-imagine-image-pro ($0.07/img). ' +
-        'Defaults to grok-imagine-image-quality.',
+        'grok-imagine-image-quality ($0.05/img). Defaults to grok-imagine-image-quality.',
     ),
   n: z.number().int().min(1).max(10).optional().describe('Number of images (1-10).'),
   aspect_ratio: z
@@ -85,7 +85,10 @@ export const grokGenerateVideoInputSchema = {
   model: z
     .string()
     .optional()
-    .describe('Video generation model. Defaults to grok-imagine-video ($0.050/sec).'),
+    .describe(
+      'Video generation model. One of: grok-imagine-video ($0.050/sec), ' +
+        'grok-imagine-video-1.5 ($0.080/sec). Defaults to grok-imagine-video.',
+    ),
   duration: z
     .number()
     .int()
