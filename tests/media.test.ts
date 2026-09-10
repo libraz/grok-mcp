@@ -12,6 +12,7 @@ describe('resolveMedia', () => {
   let jpgPath: string;
   let txtPath: string;
   let bigPath: string;
+  let webpPath: string;
 
   beforeAll(async () => {
     dir = await mkdtemp(join(tmpdir(), 'grok-mcp-test-'));
@@ -19,10 +20,12 @@ describe('resolveMedia', () => {
     jpgPath = join(dir, 'sample.jpg');
     txtPath = join(dir, 'sample.txt');
     bigPath = join(dir, 'too-big.png');
+    webpPath = join(dir, 'sample.webp');
     await writeFile(pngPath, Buffer.from([0x89, 0x50, 0x4e, 0x47]));
     await writeFile(jpgPath, Buffer.from([0xff, 0xd8, 0xff, 0xe0]));
     await writeFile(txtPath, 'hello');
     await writeFile(bigPath, Buffer.alloc(1024));
+    await writeFile(webpPath, Buffer.from('RIFF....WEBP'));
   });
 
   afterAll(async () => {
@@ -57,8 +60,37 @@ describe('resolveMedia', () => {
     await expect(resolveMedia(txtPath, 'image', MAX)).rejects.toThrow(/Unsupported image MIME/);
   });
 
+  it('rejects webp for the chat-model image kind', async () => {
+    await expect(resolveMedia(webpPath, 'image', MAX)).rejects.toThrow(
+      /Unsupported image MIME type: image\/webp .* xAI accepts jpg\/jpeg or png\./,
+    );
+  });
+
+  it('encodes a local webp for the imagine-image kind', async () => {
+    const r = await resolveMedia(webpPath, 'imagine-image', MAX);
+    expect(r.mimeType).toBe('image/webp');
+    expect(r.url.startsWith('data:image/webp;base64,')).toBe(true);
+  });
+
+  it('accepts jpg and png for the imagine-image kind too', async () => {
+    expect((await resolveMedia(pngPath, 'imagine-image', MAX)).mimeType).toBe('image/png');
+    expect((await resolveMedia(jpgPath, 'imagine-image', MAX)).mimeType).toBe('image/jpeg');
+  });
+
+  it('names the imagine-image formats in its rejection message', async () => {
+    await expect(resolveMedia(txtPath, 'imagine-image', MAX)).rejects.toThrow(
+      /xAI accepts jpg\/jpeg, png or webp\./,
+    );
+  });
+
   it('rejects files that exceed the size limit', async () => {
     await expect(resolveMedia(bigPath, 'image', 100)).rejects.toThrow(/too large/);
+  });
+
+  it('points at XAI_MAX_IMAGE_MB for an oversized imagine-image source', async () => {
+    await expect(resolveMedia(bigPath, 'imagine-image', 100)).rejects.toThrow(
+      /image too large: .* raise XAI_MAX_IMAGE_MB\./,
+    );
   });
 
   it('rejects missing files', async () => {
@@ -73,6 +105,12 @@ describe('resolveAllMedia', () => {
 
   it('returns an empty array for empty input', async () => {
     expect(await resolveAllMedia([], 'image', MAX)).toEqual([]);
+  });
+
+  it('rejects the whole batch when one input is unsupported', async () => {
+    await expect(
+      resolveAllMedia(['https://a.example/1.png', '/no/such/path.png'], 'imagine-image', MAX),
+    ).rejects.toThrow(/File not found/);
   });
 
   it('resolves multiple inputs in parallel', async () => {

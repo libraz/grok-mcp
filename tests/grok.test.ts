@@ -1,4 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Config } from '../src/config.js';
 
 const responsesCreate = vi.fn();
@@ -24,11 +27,23 @@ const config: Config = {
   defaultModel: 'grok-4.3',
   timeoutMs: 60_000,
   maxImageBytes: 20 * 1024 * 1024,
-  maxVideoBytes: 50 * 1024 * 1024,
 };
 
 const originalFetch = globalThis.fetch;
 const fetchMock = vi.fn();
+
+let fixtureDir: string;
+let webpPath: string;
+
+beforeAll(async () => {
+  fixtureDir = await mkdtemp(join(tmpdir(), 'grok-mcp-grok-'));
+  webpPath = join(fixtureDir, 'source.webp');
+  await writeFile(webpPath, Buffer.from('RIFF....WEBP'));
+});
+
+afterAll(async () => {
+  await rm(fixtureDir, { recursive: true, force: true });
+});
 
 beforeEach(() => {
   responsesCreate.mockReset();
@@ -222,16 +237,69 @@ describe('grok.generateImage', () => {
     expect(url).toBe('https://api.example/v1/images/edits');
     expect((init as RequestInit).method).toBe('POST');
     const body = JSON.parse((init as RequestInit).body as string) as {
-      images: { url: string }[];
+      images: { type: string; url: string }[];
       prompt: string;
       model: string;
     };
     expect(body.images).toEqual([
-      { url: 'https://example.com/in.png' },
-      { url: 'https://example.com/in2.png' },
+      { type: 'image_url', url: 'https://example.com/in.png' },
+      { type: 'image_url', url: 'https://example.com/in2.png' },
     ]);
     expect(body.prompt).toBe('tweak <IMAGE_0>');
     expect(body.model).toBe('grok-imagine-image-2.0');
+  });
+
+  it('forwards quality on generation', async () => {
+    imagesGenerate.mockResolvedValue({ data: [{ url: 'https://x.ai/q.png' }] });
+    const client = createGrokClient(config);
+
+    await client.generateImage({ prompt: 'a cat', quality: 'medium' });
+
+    const args = imagesGenerate.mock.calls[0]?.[0] as { quality?: string };
+    expect(args.quality).toBe('medium');
+  });
+
+  it('forwards quality and resolution through the edits endpoint', async () => {
+    fetchMock.mockResolvedValue(makeResp(200, { data: [{ url: 'https://x.ai/edit.png' }] }));
+    const client = createGrokClient(config);
+
+    await client.generateImage({
+      prompt: 'tweak <IMAGE_0>',
+      source_images: ['https://example.com/in.png'],
+      quality: 'low',
+      resolution: '2k',
+    });
+
+    const [, init] = fetchMock.mock.calls[0] ?? [];
+    const body = JSON.parse((init as RequestInit).body as string) as {
+      quality?: string;
+      resolution?: string;
+    };
+    expect(body.quality).toBe('low');
+    expect(body.resolution).toBe('2k');
+  });
+
+  it('omits quality when not requested', async () => {
+    imagesGenerate.mockResolvedValue({ data: [{ url: 'https://x.ai/q.png' }] });
+    const client = createGrokClient(config);
+
+    await client.generateImage({ prompt: 'a cat' });
+
+    expect(imagesGenerate.mock.calls[0]?.[0]).not.toHaveProperty('quality');
+  });
+
+  it('base64-encodes a local webp source image', async () => {
+    fetchMock.mockResolvedValue(makeResp(200, { data: [{ url: 'https://x.ai/edit.png' }] }));
+    const client = createGrokClient(config);
+
+    await client.generateImage({ prompt: 'tweak <IMAGE_0>', source_images: [webpPath] });
+
+    const [, init] = fetchMock.mock.calls[0] ?? [];
+    const body = JSON.parse((init as RequestInit).body as string) as {
+      images: { type: string; url: string }[];
+    };
+    expect(body.images[0]?.type).toBe('image_url');
+    expect(body.images[0]?.url.startsWith('data:image/webp;base64,')).toBe(true);
   });
 });
 
@@ -332,5 +400,48 @@ describe('grok.getVideoStatus', () => {
     expect(r.duration).toBe(8);
     const [url] = fetchMock.mock.calls[0] ?? [];
     expect(url).toBe('https://api.example/v1/videos/req-x');
+  });
+
+  it('reports progress while the job is running', async () => {
+    fetchMock.mockResolvedValueOnce(makeResp(200, { status: 'pending', progress: 42 }));
+    const client = createGrokClient(config);
+
+    const r = await client.getVideoStatus({ request_id: 'req-p' });
+
+    expect(r.status).toBe('pending');
+    expect(r.progress).toBe(42);
+    expect(r.videoUrl).toBeUndefined();
+  });
+
+  it('extracts the message from an object-shaped error', async () => {
+    fetchMock.mockResolvedValueOnce(
+      makeResp(200, { status: 'failed', error: { code: 'moderation', message: 'Blocked' } }),
+    );
+    const client = createGrokClient(config);
+
+    expect((await client.getVideoStatus({ request_id: 'req-f' })).error).toBe('Blocked');
+  });
+
+  it('falls back to the error code when no message is present', async () => {
+    fetchMock.mockResolvedValueOnce(
+      makeResp(200, { status: 'failed', error: { code: 'moderation' } }),
+    );
+    const client = createGrokClient(config);
+
+    expect((await client.getVideoStatus({ request_id: 'req-f' })).error).toBe('moderation');
+  });
+
+  it('accepts a bare string error', async () => {
+    fetchMock.mockResolvedValueOnce(makeResp(200, { status: 'failed', error: 'render crashed' }));
+    const client = createGrokClient(config);
+
+    expect((await client.getVideoStatus({ request_id: 'req-f' })).error).toBe('render crashed');
+  });
+
+  it('leaves error unset when the job did not fail', async () => {
+    fetchMock.mockResolvedValueOnce(makeResp(200, { status: 'pending' }));
+    const client = createGrokClient(config);
+
+    expect((await client.getVideoStatus({ request_id: 'req-ok' })).error).toBeUndefined();
   });
 });

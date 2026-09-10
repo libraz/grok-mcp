@@ -72,6 +72,13 @@ describe('grok_imagine_image schema', () => {
     expect(imageObj.parse({ prompt: 'x', resolution: '2k' }).resolution).toBe('2k');
     expect(() => imageObj.parse({ prompt: 'x', resolution: '4k' })).toThrow();
   });
+
+  it('accepts known quality values only', () => {
+    for (const quality of ['low', 'medium', 'auto'] as const) {
+      expect(imageObj.parse({ prompt: 'x', quality }).quality).toBe(quality);
+    }
+    expect(() => imageObj.parse({ prompt: 'x', quality: 'high' })).toThrow();
+  });
 });
 
 describe('grok_imagine_video schema', () => {
@@ -107,6 +114,7 @@ describe('grok_estimate_cost schema', () => {
   it('rejects negative numbers', () => {
     expect(() => costObj.parse({ model: 'm', input_tokens: -1 })).toThrow();
     expect(() => costObj.parse({ model: 'm', video_seconds: -0.5 })).toThrow();
+    expect(() => costObj.parse({ model: 'm', source_image_count: -1 })).toThrow();
   });
 
   it('accepts all optional fields', () => {
@@ -116,10 +124,12 @@ describe('grok_estimate_cost schema', () => {
       output_tokens: 50,
       cached_input_tokens: 20,
       image_count: 2,
+      source_image_count: 3,
       video_seconds: 3,
     });
     expect(parsed.model).toBe('grok-4.6');
     expect(parsed.input_tokens).toBe(100);
     expect(parsed.cached_input_tokens).toBe(20);
+    expect(parsed.source_image_count).toBe(3);
   });
 });

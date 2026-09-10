@@ -41,7 +41,6 @@ const config: Config = {
   defaultModel: 'grok-4.3',
   timeoutMs: 60_000,
   maxImageBytes: 20 * 1024 * 1024,
-  maxVideoBytes: 50 * 1024 * 1024,
   grokBin: 'grok',
 };
 
@@ -229,6 +228,58 @@ describe('grok_imagine_video tool', () => {
 
     expect(r.content[0]?.text).toContain('status: pending');
     expect(r.content[0]?.text).not.toContain('video_url');
+    expect(r.isError).toBeUndefined();
+  });
+
+  it('reports a failed generation as an error result', async () => {
+    fakeClient.generateVideo.mockResolvedValue({
+      request_id: 'req-f',
+      status: 'failed',
+      error: 'moderation blocked the prompt',
+      raw: {},
+    });
+    const cb = buildTools().get('grok_imagine_video');
+    if (!cb) {
+      throw new Error('missing tool');
+    }
+
+    const r = await cb({ prompt: 'nope' });
+
+    expect(r.isError).toBe(true);
+    expect(r.content[0]?.text).toContain('status: failed');
+    expect(r.content[0]?.text).toContain('error: moderation blocked the prompt');
+  });
+
+  it('reports an expired generation as an error result', async () => {
+    fakeClient.generateVideo.mockResolvedValue({
+      request_id: 'req-e',
+      status: 'expired',
+      raw: {},
+    });
+    const cb = buildTools().get('grok_imagine_video');
+    if (!cb) {
+      throw new Error('missing tool');
+    }
+
+    expect((await cb({ prompt: 'late' })).isError).toBe(true);
+  });
+
+  it('renders progress while the job is running', async () => {
+    fakeClient.generateVideo.mockResolvedValue({
+      request_id: 'req-p',
+      status: 'pending',
+      progress: 40,
+      raw: {},
+    });
+    const cb = buildTools().get('grok_imagine_video');
+    if (!cb) {
+      throw new Error('missing tool');
+    }
+
+    const r = await cb({ prompt: 'slow' });
+
+    expect(r.content[0]?.text).toContain('progress: 40%');
+    expect(r.isError).toBeUndefined();
   });
 });
 
@@ -248,6 +299,24 @@ describe('grok_imagine_video_status tool', () => {
 
     expect(fakeClient.getVideoStatus).toHaveBeenCalledWith({ request_id: 'req-3' });
     expect(r.content[0]?.text).toContain('status: pending');
+  });
+
+  it('reports a failed poll as an error result', async () => {
+    fakeClient.getVideoStatus.mockResolvedValue({
+      request_id: 'req-4',
+      status: 'failed',
+      error: 'render crashed',
+      raw: {},
+    });
+    const cb = buildTools().get('grok_imagine_video_status');
+    if (!cb) {
+      throw new Error('missing tool');
+    }
+
+    const r = await cb({ request_id: 'req-4' });
+
+    expect(r.isError).toBe(true);
+    expect(r.content[0]?.text).toContain('error: render crashed');
   });
 });
 
@@ -283,6 +352,24 @@ describe('grok_estimate_cost tool', () => {
     expect(r.isError).toBeUndefined();
     expect(r.content[0]?.text).toContain('tier: long-context');
     expect(r.content[0]?.text).toContain('cached input: 50,000 tokens');
+  });
+
+  it('includes source images in an edit estimate', async () => {
+    const cb = buildTools().get('grok_estimate_cost');
+    if (!cb) {
+      throw new Error('missing tool');
+    }
+
+    const r = await cb({
+      model: 'grok-imagine-image-2.0',
+      image_count: 2,
+      source_image_count: 3,
+    });
+
+    expect(r.isError).toBeUndefined();
+    expect(r.content[0]?.text).toContain('estimated cost: $0.2');
+    expect(r.content[0]?.text).toContain('generated images: 2');
+    expect(r.content[0]?.text).toContain('source images: 3');
   });
 
   it('flags unknown models without throwing', async () => {

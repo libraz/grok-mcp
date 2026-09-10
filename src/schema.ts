@@ -8,7 +8,7 @@ export const grokAskInputSchema = {
     .optional()
     .describe(
       'Optional images. Each item is a local file path, an http(s) URL, or a data URI. ' +
-        'Formats: jpg/jpeg or png. Max 20MiB per image.',
+        'Formats: jpg/jpeg or png. Local files are capped by XAI_MAX_IMAGE_MB (default 20MiB).',
     ),
   model: z
     .string()
@@ -82,15 +82,25 @@ export const grokGenerateImageInputSchema = {
         'grok-imagine-image-2.0 ($0.04/img), grok-imagine-image-quality ($0.05/img). ' +
         'Defaults to grok-imagine-image-2.0.',
     ),
-  n: z.number().int().min(1).max(10).optional().describe('Number of images (1-10).'),
+  n: z.number().int().min(1).max(10).optional().describe('Number of images (1-10). Defaults to 1.'),
   aspect_ratio: z
     .enum(IMAGE_ASPECT_RATIOS)
     .optional()
     .describe(
-      'Aspect ratio of the generated image. `auto` lets the model pick; when editing, the ' +
-        'output follows the first source image unless this is set.',
+      'Aspect ratio of the generated image. Defaults to `auto`, which lets the model pick; ' +
+        'when editing, the output follows the first source image unless this is set.',
     ),
-  resolution: z.enum(['1k', '2k']).optional().describe('Output resolution of the generated image.'),
+  resolution: z
+    .enum(['1k', '2k'])
+    .optional()
+    .describe('Output resolution of the generated image. Defaults to 1k.'),
+  quality: z
+    .enum(['low', 'medium', 'auto'])
+    .optional()
+    .describe(
+      'Rendering quality. Only supported by grok-imagine-image-2.0. Defaults to `auto`, ' +
+        'which renders at low quality for generation and medium for editing.',
+    ),
   source_images: z
     .array(z.string().min(1))
     .max(5)
@@ -110,6 +120,7 @@ export type GrokGenerateImageInput = {
   n?: number;
   aspect_ratio?: (typeof IMAGE_ASPECT_RATIOS)[number];
   resolution?: '1k' | '2k';
+  quality?: 'low' | 'medium' | 'auto';
   source_images?: string[];
 };
 
@@ -138,7 +149,8 @@ export const grokGenerateVideoInputSchema = {
     .optional()
     .describe(
       'Optional source still to animate (image-to-video): a local file path, an http(s) URL, ' +
-        'or a data URI (jpg/jpeg, png or webp). Omit for text-to-video.',
+        'or a data URI (jpg/jpeg, png or webp). A local file is capped by XAI_MAX_IMAGE_MB. ' +
+        'Omit for text-to-video.',
     ),
   duration: z
     .number()
@@ -146,15 +158,15 @@ export const grokGenerateVideoInputSchema = {
     .min(1)
     .max(15)
     .optional()
-    .describe('Duration in seconds (1-15). Defaults to 8.'),
+    .describe('Duration in seconds (1-15). Omitted values fall back to the xAI default.'),
   aspect_ratio: z
     .enum(VIDEO_ASPECT_RATIOS)
     .optional()
-    .describe('Aspect ratio. Defaults to 16:9 if omitted.'),
+    .describe('Aspect ratio. Omitted values fall back to the xAI default.'),
   resolution: z
     .enum(['480p', '720p', '1080p'])
     .optional()
-    .describe('Output resolution. Defaults to 480p.'),
+    .describe('Output resolution. Omitted values fall back to the xAI default.'),
   wait: z
     .boolean()
     .optional()
@@ -214,7 +226,16 @@ export const grokEstimateCostInputSchema = {
     .int()
     .nonnegative()
     .optional()
-    .describe('Number of images (for image generation models).'),
+    .describe('Number of images to generate (for image generation models). Defaults to 1.'),
+  source_image_count: z
+    .number()
+    .int()
+    .nonnegative()
+    .optional()
+    .describe(
+      'Number of source images passed to an edit (for image generation models). Edits bill ' +
+        'for the source images as well as the generated ones, so include them here.',
+    ),
   video_seconds: z
     .number()
     .nonnegative()
@@ -229,5 +250,6 @@ export type GrokEstimateCostInput = {
   output_tokens?: number;
   cached_input_tokens?: number;
   image_count?: number;
+  source_image_count?: number;
   video_seconds?: number;
 };

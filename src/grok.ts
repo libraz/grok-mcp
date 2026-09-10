@@ -128,10 +128,12 @@ const parseVideoStatus = (raw: unknown, requestId: string): VideoStatusResult =>
     status?: string;
     progress?: number;
     video?: { url?: string; duration?: number };
-    error?: { code?: string; message?: string };
+    error?: string | { code?: string; message?: string };
     request_id?: string;
   };
-  const error = r.error?.message ?? r.error?.code;
+  // xAI documents `error` as an object but does not pin its shape, so a bare string
+  // is accepted too rather than dropping the only clue a failed job carries.
+  const error = typeof r.error === 'string' ? r.error : (r.error?.message ?? r.error?.code);
   return {
     request_id: r.request_id ?? requestId,
     status: r.status ?? 'pending',
@@ -235,6 +237,7 @@ export const createGrokClient = (config: Config): GrokClient => {
       ...(input.n !== undefined && { n: input.n }),
       ...(input.aspect_ratio && { aspect_ratio: input.aspect_ratio }),
       ...(input.resolution && { resolution: input.resolution }),
+      ...(input.quality && { quality: input.quality }),
     };
 
     if (input.source_images && input.source_images.length > 0) {
@@ -244,8 +247,11 @@ export const createGrokClient = (config: Config): GrokClient => {
         config.maxImageBytes,
       );
       // The OpenAI SDK's images.edit() sends multipart/form-data; xAI wants JSON with the
-      // sources as `{ url }` objects, so this endpoint goes through rawRequest.
-      const body = { ...shared, images: sources.map((s) => ({ url: s.url })) };
+      // sources as typed `image_url` parts, so this endpoint goes through rawRequest.
+      const body = {
+        ...shared,
+        images: sources.map((s) => ({ type: 'image_url', url: s.url })),
+      };
       const resp = await rawRequest<{ data?: { url?: string }[] }>('POST', '/images/edits', body);
       return (resp.data ?? []).map((d) => d.url ?? '').filter(Boolean);
     }

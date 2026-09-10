@@ -25,6 +25,9 @@ const errorText = (s: string): ToolResult => ({
   isError: true,
 });
 
+/** Terminal states in which no video is produced, so the tool call is reported as failed. */
+const VIDEO_FAILURE_STATES = new Set(['failed', 'expired']);
+
 const videoResultText = (r: VideoStatusResult): ToolResult => {
   const lines = [`request_id: ${r.request_id}`, `status: ${r.status}`];
   if (r.progress !== undefined) {
@@ -39,7 +42,8 @@ const videoResultText = (r: VideoStatusResult): ToolResult => {
   if (r.error) {
     lines.push(`error: ${r.error}`);
   }
-  return text(lines.join('\n'));
+  const body = lines.join('\n');
+  return VIDEO_FAILURE_STATES.has(r.status) ? errorText(body) : text(body);
 };
 
 const safe = async (fn: () => Promise<ToolResult>): Promise<ToolResult> => {
@@ -153,6 +157,9 @@ export const createServer = (config: Config): McpServer => {
             cachedInputTokens: args.cached_input_tokens,
           }),
           ...(args.image_count !== undefined && { imageCount: args.image_count }),
+          ...(args.source_image_count !== undefined && {
+            sourceImageCount: args.source_image_count,
+          }),
           ...(args.video_seconds !== undefined && { videoSeconds: args.video_seconds }),
         });
         const lines = [

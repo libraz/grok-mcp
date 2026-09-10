@@ -86,14 +86,52 @@ describe('estimateCost', () => {
     expect(r.costUsd).toBeCloseTo(0.02 * 4, 6);
   });
 
+  it('bills source images alongside the generated ones', () => {
+    const r = estimateCost({
+      model: 'grok-imagine-image-2.0',
+      imageCount: 2,
+      sourceImageCount: 3,
+    });
+    expect(r.costUsd).toBeCloseTo(0.04 * 5, 6);
+    expect(r.breakdown).toEqual([
+      'generated images: 2 × $0.04/image = $0.08',
+      'source images: 3 × $0.04/image = $0.12',
+    ]);
+    expect(r.notes.some((n) => n.includes('both sides'))).toBe(true);
+  });
+
+  it('prompts for sourceImageCount when it is omitted', () => {
+    const r = estimateCost({ model: 'grok-imagine-image-2.0', imageCount: 1 });
+    expect(r.costUsd).toBeCloseTo(0.04, 6);
+    expect(r.breakdown).toHaveLength(1);
+    expect(r.notes.some((n) => n.includes('pass sourceImageCount'))).toBe(true);
+  });
+
+  it('treats sourceImageCount=0 as a plain generation', () => {
+    const r = estimateCost({
+      model: 'grok-imagine-image-2.0',
+      imageCount: 1,
+      sourceImageCount: 0,
+    });
+    expect(r.costUsd).toBeCloseTo(0.04, 6);
+    expect(r.breakdown).toHaveLength(1);
+  });
+
   it('computes video-gen cost for the 1.5 model', () => {
     const r = estimateCost({ model: 'grok-imagine-video-1.5', videoSeconds: 10 });
     expect(r.costUsd).toBeCloseTo(0.08 * 10, 6);
+    expect(r.notes.some((n) => n.includes('videoSeconds was not provided'))).toBe(false);
   });
 
   it('computes video-gen cost by seconds', () => {
     const r = estimateCost({ model: 'grok-imagine-video', videoSeconds: 10 });
     expect(r.costUsd).toBeCloseTo(0.05 * 10, 6);
+  });
+
+  it('warns instead of silently estimating $0 when videoSeconds is missing', () => {
+    const r = estimateCost({ model: 'grok-imagine-video-1.5' });
+    expect(r.costUsd).toBe(0);
+    expect(r.notes.some((n) => n.includes('videoSeconds was not provided'))).toBe(true);
   });
 
   it('flags unknown models without throwing', () => {
@@ -117,5 +155,35 @@ describe('estimateCost', () => {
 
   it('exposes a non-empty static pricing table', () => {
     expect(Object.keys(MODEL_PRICING).length).toBeGreaterThanOrEqual(8);
+  });
+
+  it('carries the published rates for grok-4.6', () => {
+    const p = MODEL_PRICING['grok-4.6'];
+    expect(p).toMatchObject({
+      kind: 'text',
+      contextTokens: 500_000,
+      inputPerMillion: 2.0,
+      cachedInputPerMillion: 0.5,
+      outputPerMillion: 6.0,
+      longContext: { inputPerMillion: 4.0, cachedInputPerMillion: 1.0, outputPerMillion: 12.0 },
+    });
+  });
+
+  it('never prices a long-context tier below its standard tier', () => {
+    for (const [model, pricing] of Object.entries(MODEL_PRICING)) {
+      if (pricing.kind !== 'text') {
+        continue;
+      }
+      expect(pricing.longContext.inputPerMillion, model).toBeGreaterThanOrEqual(
+        pricing.inputPerMillion,
+      );
+      expect(pricing.longContext.outputPerMillion, model).toBeGreaterThanOrEqual(
+        pricing.outputPerMillion,
+      );
+      expect(pricing.longContext.cachedInputPerMillion, model).toBeGreaterThanOrEqual(
+        pricing.cachedInputPerMillion,
+      );
+      expect(pricing.cachedInputPerMillion, model).toBeLessThan(pricing.inputPerMillion);
+    }
   });
 });

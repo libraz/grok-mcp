@@ -101,8 +101,13 @@ export type EstimateInput = {
   cachedInputTokens?: number;
   /** Output tokens, for text models. */
   outputTokens?: number;
-  /** Number of images, for image-generation models. */
+  /** Number of images to generate, for image-generation models. Defaults to 1. */
   imageCount?: number;
+  /**
+   * Number of source images passed to an edit, for image-generation models.
+   * Edits bill for the sources as well as the generated images.
+   */
+  sourceImageCount?: number;
   /** Video length in seconds, for video-generation models. */
   videoSeconds?: number;
 };
@@ -135,6 +140,9 @@ const round = (n: number, digits = 6): number => {
  * more moves the whole request to the model's long-context rates, which this estimate
  * applies automatically. `cachedInputTokens` is treated as a subset of `inputTokens` —
  * pass xAI's reported usage figures straight through.
+ *
+ * Image models bill per image on both sides of an edit: `imageCount` covers the generated
+ * images and `sourceImageCount` the ones passed in.
  *
  * Always succeeds: unknown models return `knownPricing: false` with a `costUsd` of 0
  * and a note pointing to `grok_list_models`. The result includes a "verify pricing at
@@ -211,15 +219,32 @@ export const estimateCost = (input: EstimateInput): EstimateResult => {
     }
   } else if (pricing.kind === 'image-gen') {
     const n = input.imageCount ?? 1;
-    total = n * pricing.perImage;
-    breakdown.push(`images: ${n} × $${pricing.perImage}/image = $${round(total)}`);
-    notes.push(
-      'Image edits bill per image on both sides: every source image passed in is charged alongside each generated image.',
-    );
+    const sources = input.sourceImageCount ?? 0;
+    const genCost = n * pricing.perImage;
+    const sourceCost = sources * pricing.perImage;
+    total = genCost + sourceCost;
+    breakdown.push(`generated images: ${n} × $${pricing.perImage}/image = $${round(genCost)}`);
+    if (sources > 0) {
+      breakdown.push(
+        `source images: ${sources} × $${pricing.perImage}/image = $${round(sourceCost)}`,
+      );
+      notes.push(
+        'Image edits bill per image on both sides, so the source images are charged above alongside the generated ones.',
+      );
+    } else {
+      notes.push(
+        'Editing also bills for every source image passed in; pass sourceImageCount to include them in the estimate.',
+      );
+    }
   } else {
     const secs = input.videoSeconds ?? 0;
     total = secs * pricing.perSecond;
     breakdown.push(`video: ${secs}s × $${pricing.perSecond}/s = $${round(total)}`);
+    if (input.videoSeconds === undefined) {
+      notes.push(
+        'videoSeconds was not provided, so this estimate is $0. Pass the intended clip length in seconds (1-15).',
+      );
+    }
   }
 
   return {
