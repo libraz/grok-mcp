@@ -13,7 +13,7 @@ import type { Backend } from './config.js';
 const PACKAGE_SPEC = 'github:libraz/grok-mcp';
 
 /** Default model id for the API backend when the user accepts the suggested value. */
-const DEFAULT_MODEL = 'grok-4.3';
+const DEFAULT_MODEL = 'grok-4.6';
 
 /** Shape of the `mcpServers.<name>` entry shared by Claude Code and Codex CLI. */
 type McpServerEntry = {

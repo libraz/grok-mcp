@@ -532,7 +532,7 @@ describe('runInit', () => {
       mcpServers: Record<string, { env: Record<string, string> }>;
     };
     expect(claude.mcpServers.grok?.env.XAI_API_KEY).toBeUndefined();
-    expect(claude.mcpServers.grok?.env.XAI_DEFAULT_MODEL).toBe('grok-4.3');
+    expect(claude.mcpServers.grok?.env.XAI_DEFAULT_MODEL).toBe('grok-4.6');
 
     const codex = await readFile(join(dir, '.codex', 'config.toml'), 'utf8');
     expect(codex).not.toContain('XAI_API_KEY');

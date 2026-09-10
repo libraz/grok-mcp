@@ -1,5 +1,5 @@
 const DEFAULT_BASE_URL = 'https://api.x.ai/v1';
-const DEFAULT_MODEL = 'grok-4.3';
+const DEFAULT_MODEL = 'grok-4.6';
 const DEFAULT_TIMEOUT_MS = 120_000;
 const DEFAULT_MAX_IMAGE_MB = 20;
 const DEFAULT_MAX_VIDEO_MB = 50;

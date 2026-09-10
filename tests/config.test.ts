@@ -6,7 +6,7 @@ describe('loadConfig', () => {
     const config = loadConfig({ XAI_API_KEY: 'xai-test' });
     expect(config.apiKey).toBe('xai-test');
     expect(config.baseUrl).toBe('https://api.x.ai/v1');
-    expect(config.defaultModel).toBe('grok-4.3');
+    expect(config.defaultModel).toBe('grok-4.6');
     expect(config.timeoutMs).toBe(120_000);
     expect(config.maxImageBytes).toBe(20 * 1024 * 1024);
     expect(config.maxVideoBytes).toBe(50 * 1024 * 1024);

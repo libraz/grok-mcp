@@ -31,7 +31,7 @@ Required environment (api backend only):
 Optional environment:
   XAI_BACKEND              Response backend: api (default) or cli
   XAI_BASE_URL             Override API endpoint (default: https://api.x.ai/v1)
-  XAI_DEFAULT_MODEL        Default model id for api backend (default: grok-4.3)
+  XAI_DEFAULT_MODEL        Default model id for api backend (default: grok-4.6)
   XAI_TIMEOUT_MS           Request timeout in ms (default: 120000)
   XAI_MAX_IMAGE_MB         Max image size for base64 encoding (default: 20)
   XAI_MAX_VIDEO_MB         (Reserved, no video input is documented by xAI yet)
