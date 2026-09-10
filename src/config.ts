@@ -2,7 +2,6 @@ const DEFAULT_BASE_URL = 'https://api.x.ai/v1';
 const DEFAULT_MODEL = 'grok-4.6';
 const DEFAULT_TIMEOUT_MS = 120_000;
 const DEFAULT_MAX_IMAGE_MB = 20;
-const DEFAULT_MAX_VIDEO_MB = 50;
 const DEFAULT_GROK_BIN = 'grok';
 
 /**
@@ -32,10 +31,11 @@ export type Config = {
   defaultModel: string;
   /** Timeout in milliseconds for individual HTTP requests and total video polling. */
   timeoutMs: number;
-  /** Max accepted size, in bytes, for an image passed to `grok_ask` / `grok_imagine_image`. */
+  /**
+   * Max accepted size, in bytes, for any locally-read image: `grok_ask` images,
+   * `grok_imagine_image` source images, and the `grok_imagine_video` still.
+   */
   maxImageBytes: number;
-  /** Reserved cap for video input. xAI does not yet expose a video-understanding endpoint. */
-  maxVideoBytes: number;
   /** Path or command name of the `grok` CLI binary (used only when {@link backend} is `cli`). */
   grokBin: string;
   /** Default model id passed to the `grok` CLI when a tool call does not specify one. */
@@ -73,9 +73,9 @@ const parseBackend = (raw: string | undefined): Backend => {
  * authenticates via `grok login` — and `apiKey` is left as an empty string.
  *
  * Optional, with sensible defaults: `XAI_BASE_URL`, `XAI_DEFAULT_MODEL`,
- * `XAI_TIMEOUT_MS`, `XAI_MAX_IMAGE_MB`, `XAI_MAX_VIDEO_MB`, `GROK_BIN`,
- * `GROK_CLI_MODEL`. Non-numeric or non-positive numeric values fall back to
- * defaults rather than failing the boot.
+ * `XAI_TIMEOUT_MS`, `XAI_MAX_IMAGE_MB`, `GROK_BIN`, `GROK_CLI_MODEL`.
+ * Non-numeric or non-positive numeric values fall back to defaults rather than
+ * failing the boot.
  *
  * @param env Environment map. Defaults to `process.env`; pass a stub in tests.
  * @returns Fully resolved configuration.
@@ -101,7 +101,6 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): Config => {
     defaultModel: env.XAI_DEFAULT_MODEL?.trim() || DEFAULT_MODEL,
     timeoutMs: parsePositiveInt(env.XAI_TIMEOUT_MS, DEFAULT_TIMEOUT_MS),
     maxImageBytes: parsePositiveInt(env.XAI_MAX_IMAGE_MB, DEFAULT_MAX_IMAGE_MB) * 1024 * 1024,
-    maxVideoBytes: parsePositiveInt(env.XAI_MAX_VIDEO_MB, DEFAULT_MAX_VIDEO_MB) * 1024 * 1024,
     grokBin: env.GROK_BIN?.trim() || DEFAULT_GROK_BIN,
     ...(cliDefaultModel && { cliDefaultModel }),
   };

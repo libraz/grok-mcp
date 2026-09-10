@@ -28,7 +28,6 @@ const config: Config = {
   defaultModel: 'grok-4.3',
   timeoutMs: 60_000,
   maxImageBytes: 20 * 1024 * 1024,
-  maxVideoBytes: 50 * 1024 * 1024,
   grokBin: 'grok',
   cliDefaultModel: 'grok-4.5',
 };

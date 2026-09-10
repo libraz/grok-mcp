@@ -9,7 +9,6 @@ describe('loadConfig', () => {
     expect(config.defaultModel).toBe('grok-4.6');
     expect(config.timeoutMs).toBe(120_000);
     expect(config.maxImageBytes).toBe(20 * 1024 * 1024);
-    expect(config.maxVideoBytes).toBe(50 * 1024 * 1024);
   });
 
   it('trims whitespace from values', () => {
@@ -28,11 +27,9 @@ describe('loadConfig', () => {
       XAI_API_KEY: 'xai-test',
       XAI_TIMEOUT_MS: '5000',
       XAI_MAX_IMAGE_MB: '10',
-      XAI_MAX_VIDEO_MB: '100',
     });
     expect(config.timeoutMs).toBe(5000);
     expect(config.maxImageBytes).toBe(10 * 1024 * 1024);
-    expect(config.maxVideoBytes).toBe(100 * 1024 * 1024);
   });
 
   it('falls back to defaults on invalid numeric input', () => {
@@ -40,11 +37,9 @@ describe('loadConfig', () => {
       XAI_API_KEY: 'xai-test',
       XAI_TIMEOUT_MS: 'not-a-number',
       XAI_MAX_IMAGE_MB: '-5',
-      XAI_MAX_VIDEO_MB: '0',
     });
     expect(config.timeoutMs).toBe(120_000);
     expect(config.maxImageBytes).toBe(20 * 1024 * 1024);
-    expect(config.maxVideoBytes).toBe(50 * 1024 * 1024);
   });
 
   it('throws a helpful error when XAI_API_KEY is missing', () => {
