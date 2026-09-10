@@ -1,5 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Config } from './config.js';
+import type { VideoStatusResult } from './grok.js';
 import { createGrokClient } from './grok.js';
 import { createGrokCliClient } from './grok-cli.js';
 import { estimateCost } from './pricing.js';
@@ -23,6 +24,23 @@ const errorText = (s: string): ToolResult => ({
   content: [{ type: 'text', text: s }],
   isError: true,
 });
+
+const videoResultText = (r: VideoStatusResult): ToolResult => {
+  const lines = [`request_id: ${r.request_id}`, `status: ${r.status}`];
+  if (r.progress !== undefined) {
+    lines.push(`progress: ${r.progress}%`);
+  }
+  if (r.videoUrl) {
+    lines.push(`video_url: ${r.videoUrl}`);
+  }
+  if (r.duration !== undefined) {
+    lines.push(`duration: ${r.duration}s`);
+  }
+  if (r.error) {
+    lines.push(`error: ${r.error}`);
+  }
+  return text(lines.join('\n'));
+};
 
 const safe = async (fn: () => Promise<ToolResult>): Promise<ToolResult> => {
   try {
@@ -103,18 +121,7 @@ export const createServer = (config: Config): McpServer => {
         'immediately and poll later with grok_imagine_video_status.',
       inputSchema: grokGenerateVideoInputSchema,
     },
-    async (args) =>
-      safe(async () => {
-        const r = await grok.generateVideo(args);
-        const lines = [`request_id: ${r.request_id}`, `status: ${r.status}`];
-        if (r.videoUrl) {
-          lines.push(`video_url: ${r.videoUrl}`);
-        }
-        if (r.duration !== undefined) {
-          lines.push(`duration: ${r.duration}s`);
-        }
-        return text(lines.join('\n'));
-      }),
+    async (args) => safe(async () => videoResultText(await grok.generateVideo(args))),
   );
 
   server.registerTool(
@@ -124,18 +131,7 @@ export const createServer = (config: Config): McpServer => {
       description: 'Check the status of an in-progress video generation by request_id.',
       inputSchema: grokVideoStatusInputSchema,
     },
-    async (args) =>
-      safe(async () => {
-        const r = await grok.getVideoStatus(args);
-        const lines = [`request_id: ${r.request_id}`, `status: ${r.status}`];
-        if (r.videoUrl) {
-          lines.push(`video_url: ${r.videoUrl}`);
-        }
-        if (r.duration !== undefined) {
-          lines.push(`duration: ${r.duration}s`);
-        }
-        return text(lines.join('\n'));
-      }),
+    async (args) => safe(async () => videoResultText(await grok.getVideoStatus(args))),
   );
 
   server.registerTool(
@@ -153,12 +149,16 @@ export const createServer = (config: Config): McpServer => {
           model: args.model,
           ...(args.input_tokens !== undefined && { inputTokens: args.input_tokens }),
           ...(args.output_tokens !== undefined && { outputTokens: args.output_tokens }),
+          ...(args.cached_input_tokens !== undefined && {
+            cachedInputTokens: args.cached_input_tokens,
+          }),
           ...(args.image_count !== undefined && { imageCount: args.image_count }),
           ...(args.video_seconds !== undefined && { videoSeconds: args.video_seconds }),
         });
         const lines = [
           `model: ${r.model}`,
           `pricing known: ${r.knownPricing ? 'yes' : 'no'}`,
+          ...(r.tier ? [`tier: ${r.tier}`] : []),
           `estimated cost: $${r.costUsd}`,
         ];
         if (r.breakdown.length > 0) {

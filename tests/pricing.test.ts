@@ -5,13 +5,24 @@ describe('estimateCost', () => {
   it('computes text-model cost for grok-4.3', () => {
     const r = estimateCost({
       model: 'grok-4.3',
-      inputTokens: 1_000_000,
-      outputTokens: 500_000,
+      inputTokens: 100_000,
+      outputTokens: 50_000,
     });
     expect(r.knownPricing).toBe(true);
-    expect(r.costUsd).toBeCloseTo(1.25 + 0.5 * 2.5, 6);
+    expect(r.tier).toBe('standard');
+    expect(r.costUsd).toBeCloseTo(0.1 * 1.25 + 0.05 * 2.5, 6);
     expect(r.breakdown).toHaveLength(2);
     expect(r.notes[0]).toMatch(/Pricing snapshot/);
+  });
+
+  it('computes text-model cost for grok-4.6', () => {
+    const r = estimateCost({
+      model: 'grok-4.6',
+      inputTokens: 10_000,
+      outputTokens: 2_000,
+    });
+    expect(r.knownPricing).toBe(true);
+    expect(r.costUsd).toBeCloseTo((10_000 / 1_000_000) * 2.0 + (2_000 / 1_000_000) * 6.0, 8);
   });
 
   it('computes text-model cost for grok-4.5', () => {
@@ -24,9 +35,32 @@ describe('estimateCost', () => {
     expect(r.costUsd).toBeCloseTo((10_000 / 1_000_000) * 2.0 + (2_000 / 1_000_000) * 6.0, 8);
   });
 
-  it('warns that long-context requests bill at a higher tier', () => {
-    const r = estimateCost({ model: 'grok-4.5', inputTokens: 300_000 });
+  it('bills the whole request at long-context rates past the threshold', () => {
+    const r = estimateCost({ model: 'grok-4.5', inputTokens: 300_000, outputTokens: 1_000 });
+    expect(r.tier).toBe('long-context');
+    expect(r.costUsd).toBeCloseTo(0.3 * 4.0 + 0.001 * 12.0, 6);
     expect(r.notes.some((n) => n.includes('long-context'))).toBe(true);
+  });
+
+  it('bills cached input tokens at the cached rate', () => {
+    const r = estimateCost({
+      model: 'grok-4.6',
+      inputTokens: 100_000,
+      cachedInputTokens: 80_000,
+      outputTokens: 1_000,
+    });
+    expect(r.costUsd).toBeCloseTo(0.02 * 2.0 + 0.08 * 0.5 + 0.001 * 6.0, 6);
+    expect(r.breakdown.some((b) => b.startsWith('cached input:'))).toBe(true);
+  });
+
+  it('caps cached input tokens at the input total', () => {
+    const r = estimateCost({
+      model: 'grok-4.6',
+      inputTokens: 1_000,
+      cachedInputTokens: 5_000,
+    });
+    expect(r.costUsd).toBeCloseTo(0.001 * 0.5, 6);
+    expect(r.notes.some((n) => n.includes('exceeds inputTokens'))).toBe(true);
   });
 
   it('treats missing token counts as zero', () => {
@@ -38,7 +72,13 @@ describe('estimateCost', () => {
   it('computes image-gen cost with default n=1', () => {
     const r = estimateCost({ model: 'grok-imagine-image-quality' });
     expect(r.knownPricing).toBe(true);
+    expect(r.tier).toBeUndefined();
     expect(r.costUsd).toBeCloseTo(0.05, 6);
+  });
+
+  it('computes image-gen cost for the 2.0 model', () => {
+    const r = estimateCost({ model: 'grok-imagine-image-2.0', imageCount: 3 });
+    expect(r.costUsd).toBeCloseTo(0.04 * 3, 6);
   });
 
   it('computes image-gen cost for multiple images', () => {

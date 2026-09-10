@@ -258,12 +258,31 @@ describe('grok_estimate_cost tool', () => {
       throw new Error('missing tool');
     }
 
-    const r = await cb({ model: 'grok-4.3', input_tokens: 1_000_000, output_tokens: 0 });
+    const r = await cb({ model: 'grok-4.3', input_tokens: 100_000, output_tokens: 0 });
 
     expect(r.isError).toBeUndefined();
     expect(r.content[0]?.text).toContain('model: grok-4.3');
-    expect(r.content[0]?.text).toContain('estimated cost: $1.25');
+    expect(r.content[0]?.text).toContain('tier: standard');
+    expect(r.content[0]?.text).toContain('estimated cost: $0.125');
     expect(r.content[0]?.text).toContain('breakdown:');
+  });
+
+  it('applies long-context rates and reports the tier', async () => {
+    const cb = buildTools().get('grok_estimate_cost');
+    if (!cb) {
+      throw new Error('missing tool');
+    }
+
+    const r = await cb({
+      model: 'grok-4.6',
+      input_tokens: 250_000,
+      cached_input_tokens: 50_000,
+      output_tokens: 1_000,
+    });
+
+    expect(r.isError).toBeUndefined();
+    expect(r.content[0]?.text).toContain('tier: long-context');
+    expect(r.content[0]?.text).toContain('cached input: 50,000 tokens');
   });
 
   it('flags unknown models without throwing', async () => {

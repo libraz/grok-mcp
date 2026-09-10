@@ -15,7 +15,7 @@ export const grokAskInputSchema = {
     .optional()
     .describe(
       'xAI model ID. Use `grok_list_models` to discover live model IDs. ' +
-        'Falls back to env XAI_DEFAULT_MODEL or grok-4.3.',
+        'Falls back to env XAI_DEFAULT_MODEL or grok-4.6.',
     ),
   system: z.string().optional().describe('Optional system prompt.'),
   max_tokens: z.number().int().positive().optional().describe('Maximum output tokens.'),
@@ -45,28 +45,61 @@ export type GrokAskInput = {
 /** Zod input schema for `grok_list_models`. No parameters. */
 export const grokListModelsInputSchema = {} as const;
 
+/** Aspect ratios accepted by the image generation / edit endpoints. */
+const IMAGE_ASPECT_RATIOS = [
+  '1:1',
+  '3:4',
+  '4:3',
+  '9:16',
+  '16:9',
+  '2:3',
+  '3:2',
+  '9:19.5',
+  '19.5:9',
+  '9:20',
+  '20:9',
+  '1:2',
+  '2:1',
+  '21:9',
+  '5:2',
+  'auto',
+] as const;
+
 /** Zod input schema for the `grok_imagine_image` tool. */
 export const grokGenerateImageInputSchema = {
-  prompt: z.string().min(1).describe('Text description of the image to generate.'),
+  prompt: z
+    .string()
+    .min(1)
+    .describe(
+      'Text description of the image to generate. When editing, refer to individual source ' +
+        'images as <IMAGE_0>, <IMAGE_1>, … in the order they were passed.',
+    ),
   model: z
     .string()
     .optional()
     .describe(
       'Image generation model. One of: grok-imagine-image ($0.02/img), ' +
-        'grok-imagine-image-quality ($0.05/img). Defaults to grok-imagine-image-quality.',
+        'grok-imagine-image-2.0 ($0.04/img), grok-imagine-image-quality ($0.05/img). ' +
+        'Defaults to grok-imagine-image-2.0.',
     ),
   n: z.number().int().min(1).max(10).optional().describe('Number of images (1-10).'),
   aspect_ratio: z
-    .enum(['16:9', '9:16', '1:1', '4:3', '3:4', '3:2', '2:3'])
-    .optional()
-    .describe('Aspect ratio of the generated image.'),
-  source_images: z
-    .array(z.string().min(1))
-    .max(3)
+    .enum(IMAGE_ASPECT_RATIOS)
     .optional()
     .describe(
-      'Optional source images for editing (up to 3). When provided, the /v1/images/edits ' +
-        'endpoint is used instead of /v1/images/generations.',
+      'Aspect ratio of the generated image. `auto` lets the model pick; when editing, the ' +
+        'output follows the first source image unless this is set.',
+    ),
+  resolution: z.enum(['1k', '2k']).optional().describe('Output resolution of the generated image.'),
+  source_images: z
+    .array(z.string().min(1))
+    .max(5)
+    .optional()
+    .describe(
+      'Optional source images for editing (up to 5), each a local file path, an http(s) URL, ' +
+        'or a data URI (jpg/jpeg, png or webp). When provided, the /v1/images/edits endpoint ' +
+        'is used instead of /v1/images/generations, and source images are billed alongside ' +
+        'the generated ones.',
     ),
 };
 
@@ -75,19 +108,37 @@ export type GrokGenerateImageInput = {
   prompt: string;
   model?: string;
   n?: number;
-  aspect_ratio?: '16:9' | '9:16' | '1:1' | '4:3' | '3:4' | '3:2' | '2:3';
+  aspect_ratio?: (typeof IMAGE_ASPECT_RATIOS)[number];
+  resolution?: '1k' | '2k';
   source_images?: string[];
 };
 
+/** Aspect ratios accepted by the video generation endpoint. */
+const VIDEO_ASPECT_RATIOS = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'] as const;
+
 /** Zod input schema for the `grok_imagine_video` tool. */
 export const grokGenerateVideoInputSchema = {
-  prompt: z.string().min(1).describe('Text description of the video to generate.'),
+  prompt: z
+    .string()
+    .min(1)
+    .describe(
+      'Text description of the video to generate. With `image` set, describe how the still ' +
+        'should be animated.',
+    ),
   model: z
     .string()
     .optional()
     .describe(
       'Video generation model. One of: grok-imagine-video ($0.050/sec), ' +
-        'grok-imagine-video-1.5 ($0.080/sec). Defaults to grok-imagine-video.',
+        'grok-imagine-video-1.5 ($0.080/sec). Defaults to grok-imagine-video-1.5.',
+    ),
+  image: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      'Optional source still to animate (image-to-video): a local file path, an http(s) URL, ' +
+        'or a data URI (jpg/jpeg, png or webp). Omit for text-to-video.',
     ),
   duration: z
     .number()
@@ -95,12 +146,15 @@ export const grokGenerateVideoInputSchema = {
     .min(1)
     .max(15)
     .optional()
-    .describe('Duration in seconds (1-15). Defaults vary by use case.'),
+    .describe('Duration in seconds (1-15). Defaults to 8.'),
   aspect_ratio: z
-    .enum(['16:9', '9:16', '1:1', '4:3', '3:4', '3:2', '2:3'])
+    .enum(VIDEO_ASPECT_RATIOS)
     .optional()
     .describe('Aspect ratio. Defaults to 16:9 if omitted.'),
-  resolution: z.enum(['480p', '720p']).optional().describe('Output resolution. Defaults to 480p.'),
+  resolution: z
+    .enum(['480p', '720p', '1080p'])
+    .optional()
+    .describe('Output resolution. Defaults to 480p.'),
   wait: z
     .boolean()
     .optional()
@@ -114,9 +168,10 @@ export const grokGenerateVideoInputSchema = {
 export type GrokGenerateVideoInput = {
   prompt: string;
   model?: string;
+  image?: string;
   duration?: number;
-  aspect_ratio?: '16:9' | '9:16' | '1:1' | '4:3' | '3:4' | '3:2' | '2:3';
-  resolution?: '480p' | '720p';
+  aspect_ratio?: (typeof VIDEO_ASPECT_RATIOS)[number];
+  resolution?: '480p' | '720p' | '1080p';
   wait?: boolean;
 };
 
@@ -136,8 +191,24 @@ export type GrokVideoStatusInput = {
 /** Zod input schema for the `grok_estimate_cost` tool. */
 export const grokEstimateCostInputSchema = {
   model: z.string().min(1).describe('xAI model ID to estimate cost for.'),
-  input_tokens: z.number().int().nonnegative().optional().describe('Estimated input tokens.'),
+  input_tokens: z
+    .number()
+    .int()
+    .nonnegative()
+    .optional()
+    .describe(
+      'Estimated input tokens, cached ones included. At 200,000 or more the whole request ' +
+        "bills at the model's long-context rates, which the estimate applies.",
+    ),
   output_tokens: z.number().int().nonnegative().optional().describe('Estimated output tokens.'),
+  cached_input_tokens: z
+    .number()
+    .int()
+    .nonnegative()
+    .optional()
+    .describe(
+      'Portion of input_tokens served from the prompt cache, billed at the cheaper cached rate.',
+    ),
   image_count: z
     .number()
     .int()
@@ -156,6 +227,7 @@ export type GrokEstimateCostInput = {
   model: string;
   input_tokens?: number;
   output_tokens?: number;
+  cached_input_tokens?: number;
   image_count?: number;
   video_seconds?: number;
 };

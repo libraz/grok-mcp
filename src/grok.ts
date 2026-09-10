@@ -18,10 +18,14 @@ export type VideoStatusResult = {
   request_id: string;
   /** Lifecycle state. The four documented values are kept open as `string` for forward compat. */
   status: 'pending' | 'done' | 'expired' | 'failed' | string;
+  /** Completion percentage (0-100), when the API reports one. */
+  progress?: number;
   /** Signed URL of the finished video, when `status === 'done'`. */
   videoUrl?: string;
   /** Length of the finished video in seconds, when reported by the API. */
   duration?: number;
+  /** Error message, when `status === 'failed'`. */
+  error?: string;
   /** The raw response body, retained so callers can inspect undocumented fields. */
   raw: unknown;
 };
@@ -43,8 +47,8 @@ export type GrokClient = {
   getVideoStatus: (input: GrokVideoStatusInput) => Promise<VideoStatusResult>;
 };
 
-const DEFAULT_IMAGE_MODEL = 'grok-imagine-image-quality';
-const DEFAULT_VIDEO_MODEL = 'grok-imagine-video';
+const DEFAULT_IMAGE_MODEL = 'grok-imagine-image-2.0';
+const DEFAULT_VIDEO_MODEL = 'grok-imagine-video-1.5';
 const VIDEO_POLL_INTERVAL_MS = 5_000;
 
 const buildResponsesInput = (
@@ -122,14 +126,19 @@ const sleep = (ms: number): Promise<void> =>
 const parseVideoStatus = (raw: unknown, requestId: string): VideoStatusResult => {
   const r = raw as {
     status?: string;
+    progress?: number;
     video?: { url?: string; duration?: number };
+    error?: { code?: string; message?: string };
     request_id?: string;
   };
+  const error = r.error?.message ?? r.error?.code;
   return {
     request_id: r.request_id ?? requestId,
     status: r.status ?? 'pending',
+    ...(r.progress !== undefined && { progress: r.progress }),
     ...(r.video?.url !== undefined && { videoUrl: r.video.url }),
     ...(r.video?.duration !== undefined && { duration: r.video.duration }),
+    ...(error !== undefined && { error }),
     raw,
   };
 };
@@ -220,26 +229,29 @@ export const createGrokClient = (config: Config): GrokClient => {
 
   const generateImage = async (input: GrokGenerateImageInput): Promise<string[]> => {
     const model = input.model ?? DEFAULT_IMAGE_MODEL;
+    const shared = {
+      model,
+      prompt: input.prompt,
+      ...(input.n !== undefined && { n: input.n }),
+      ...(input.aspect_ratio && { aspect_ratio: input.aspect_ratio }),
+      ...(input.resolution && { resolution: input.resolution }),
+    };
+
     if (input.source_images && input.source_images.length > 0) {
-      const sources = await resolveAllMedia(input.source_images, 'image', config.maxImageBytes);
-      const body = {
-        model,
-        prompt: input.prompt,
-        ...(input.n !== undefined && { n: input.n }),
-        ...(input.aspect_ratio && { aspect_ratio: input.aspect_ratio }),
-        images: sources.map((s) => s.url),
-      };
+      const sources = await resolveAllMedia(
+        input.source_images,
+        'imagine-image',
+        config.maxImageBytes,
+      );
+      // The OpenAI SDK's images.edit() sends multipart/form-data; xAI wants JSON with the
+      // sources as `{ url }` objects, so this endpoint goes through rawRequest.
+      const body = { ...shared, images: sources.map((s) => ({ url: s.url })) };
       const resp = await rawRequest<{ data?: { url?: string }[] }>('POST', '/images/edits', body);
       return (resp.data ?? []).map((d) => d.url ?? '').filter(Boolean);
     }
 
     try {
-      const resp = await client.images.generate({
-        model,
-        prompt: input.prompt,
-        ...(input.n !== undefined && { n: input.n }),
-        ...(input.aspect_ratio && { aspect_ratio: input.aspect_ratio }),
-      } as never);
+      const resp = await client.images.generate(shared as never);
       return ((resp.data ?? []) as { url?: string }[]).map((d) => d.url ?? '').filter(Boolean);
     } catch (err) {
       throw formatApiError(err);
@@ -253,9 +265,15 @@ export const createGrokClient = (config: Config): GrokClient => {
 
   const generateVideo = async (input: GrokGenerateVideoInput): Promise<VideoStatusResult> => {
     const model = input.model ?? DEFAULT_VIDEO_MODEL;
+    const [source] = await resolveAllMedia(
+      input.image ? [input.image] : undefined,
+      'imagine-image',
+      config.maxImageBytes,
+    );
     const body = {
       model,
       prompt: input.prompt,
+      ...(source && { image: { url: source.url } }),
       ...(input.duration !== undefined && { duration: input.duration }),
       ...(input.aspect_ratio && { aspect_ratio: input.aspect_ratio }),
       ...(input.resolution && { resolution: input.resolution }),

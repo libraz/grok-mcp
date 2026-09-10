@@ -185,7 +185,12 @@ describe('grok.generateImage', () => {
     imagesGenerate.mockResolvedValue({ data: [{ url: 'https://x.ai/img1.png' }] });
     const client = createGrokClient(config);
 
-    const urls = await client.generateImage({ prompt: 'a cat', n: 2, aspect_ratio: '1:1' });
+    const urls = await client.generateImage({
+      prompt: 'a cat',
+      n: 2,
+      aspect_ratio: '1:1',
+      resolution: '2k',
+    });
 
     expect(urls).toEqual(['https://x.ai/img1.png']);
     const args = imagesGenerate.mock.calls[0]?.[0] as {
@@ -193,11 +198,13 @@ describe('grok.generateImage', () => {
       prompt: string;
       n?: number;
       aspect_ratio?: string;
+      resolution?: string;
     };
-    expect(args.model).toBe('grok-imagine-image-quality');
+    expect(args.model).toBe('grok-imagine-image-2.0');
     expect(args.prompt).toBe('a cat');
     expect(args.n).toBe(2);
     expect(args.aspect_ratio).toBe('1:1');
+    expect(args.resolution).toBe('2k');
   });
 
   it('uses the edits endpoint when source_images is provided', async () => {
@@ -205,8 +212,8 @@ describe('grok.generateImage', () => {
     const client = createGrokClient(config);
 
     const urls = await client.generateImage({
-      prompt: 'tweak',
-      source_images: ['https://example.com/in.png'],
+      prompt: 'tweak <IMAGE_0>',
+      source_images: ['https://example.com/in.png', 'https://example.com/in2.png'],
     });
 
     expect(urls).toEqual(['https://x.ai/edit.png']);
@@ -215,11 +222,16 @@ describe('grok.generateImage', () => {
     expect(url).toBe('https://api.example/v1/images/edits');
     expect((init as RequestInit).method).toBe('POST');
     const body = JSON.parse((init as RequestInit).body as string) as {
-      images: string[];
+      images: { url: string }[];
       prompt: string;
+      model: string;
     };
-    expect(body.images).toEqual(['https://example.com/in.png']);
-    expect(body.prompt).toBe('tweak');
+    expect(body.images).toEqual([
+      { url: 'https://example.com/in.png' },
+      { url: 'https://example.com/in2.png' },
+    ]);
+    expect(body.prompt).toBe('tweak <IMAGE_0>');
+    expect(body.model).toBe('grok-imagine-image-2.0');
   });
 });
 
@@ -233,6 +245,33 @@ describe('grok.generateVideo', () => {
     expect(r.request_id).toBe('req-1');
     expect(r.status).toBe('pending');
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [, init] = fetchMock.mock.calls[0] ?? [];
+    const body = JSON.parse((init as RequestInit).body as string) as {
+      model: string;
+      image?: unknown;
+    };
+    expect(body.model).toBe('grok-imagine-video-1.5');
+    expect(body.image).toBeUndefined();
+  });
+
+  it('sends the source still for image-to-video', async () => {
+    fetchMock.mockResolvedValueOnce(makeResp(200, { request_id: 'req-i2v' }));
+    const client = createGrokClient(config);
+
+    await client.generateVideo({
+      prompt: 'pan across the scene',
+      image: 'https://example.com/still.png',
+      resolution: '1080p',
+      wait: false,
+    });
+
+    const [, init] = fetchMock.mock.calls[0] ?? [];
+    const body = JSON.parse((init as RequestInit).body as string) as {
+      image?: { url: string };
+      resolution?: string;
+    };
+    expect(body.image).toEqual({ url: 'https://example.com/still.png' });
+    expect(body.resolution).toBe('1080p');
   });
 
   it('polls until the video is done', async () => {

@@ -49,18 +49,28 @@ describe('grok_imagine_image schema', () => {
     expect(() => imageObj.parse({ prompt: 'x', n: 11 })).toThrow();
   });
 
-  it('rejects more than three source images', () => {
+  it('accepts up to five source images', () => {
+    expect(
+      imageObj.parse({ prompt: 'edit', source_images: ['a', 'b', 'c', 'd', 'e'] }).source_images,
+    ).toHaveLength(5);
     expect(() =>
       imageObj.parse({
         prompt: 'edit',
-        source_images: ['a', 'b', 'c', 'd'],
+        source_images: ['a', 'b', 'c', 'd', 'e', 'f'],
       }),
     ).toThrow();
   });
 
   it('accepts allowed aspect ratios only', () => {
     expect(imageObj.parse({ prompt: 'x', aspect_ratio: '16:9' }).aspect_ratio).toBe('16:9');
+    expect(imageObj.parse({ prompt: 'x', aspect_ratio: 'auto' }).aspect_ratio).toBe('auto');
+    expect(imageObj.parse({ prompt: 'x', aspect_ratio: '21:9' }).aspect_ratio).toBe('21:9');
     expect(() => imageObj.parse({ prompt: 'x', aspect_ratio: '7:5' })).toThrow();
+  });
+
+  it('accepts known resolutions only', () => {
+    expect(imageObj.parse({ prompt: 'x', resolution: '2k' }).resolution).toBe('2k');
+    expect(() => imageObj.parse({ prompt: 'x', resolution: '4k' })).toThrow();
   });
 });
 
@@ -72,7 +82,13 @@ describe('grok_imagine_video schema', () => {
 
   it('accepts known resolutions only', () => {
     expect(videoObj.parse({ prompt: 'x', resolution: '720p' }).resolution).toBe('720p');
-    expect(() => videoObj.parse({ prompt: 'x', resolution: '1080p' })).toThrow();
+    expect(videoObj.parse({ prompt: 'x', resolution: '1080p' }).resolution).toBe('1080p');
+    expect(() => videoObj.parse({ prompt: 'x', resolution: '4k' })).toThrow();
+  });
+
+  it('accepts an optional source image for image-to-video', () => {
+    expect(videoObj.parse({ prompt: 'x', image: '/tmp/still.png' }).image).toBe('/tmp/still.png');
+    expect(() => videoObj.parse({ prompt: 'x', image: '' })).toThrow();
   });
 });
 
@@ -95,13 +111,15 @@ describe('grok_estimate_cost schema', () => {
 
   it('accepts all optional fields', () => {
     const parsed = costObj.parse({
-      model: 'grok-4.3',
+      model: 'grok-4.6',
       input_tokens: 100,
       output_tokens: 50,
+      cached_input_tokens: 20,
       image_count: 2,
       video_seconds: 3,
     });
-    expect(parsed.model).toBe('grok-4.3');
+    expect(parsed.model).toBe('grok-4.6');
     expect(parsed.input_tokens).toBe(100);
+    expect(parsed.cached_input_tokens).toBe(20);
   });
 });

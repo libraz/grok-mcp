@@ -2,8 +2,13 @@ import { readFile, stat } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import mime from 'mime-types';
 
-/** Kind of media a caller is resolving. Only `image` is supported today. */
-export type MediaKind = 'image';
+/**
+ * Kind of media a caller is resolving.
+ *
+ * - `image`: an image sent to a chat model for understanding (jpg/png only).
+ * - `imagine-image`: a source image sent to Grok Imagine, which also takes WebP.
+ */
+export type MediaKind = 'image' | 'imagine-image';
 
 /** Result of resolving a media reference into a form xAI's Responses API accepts. */
 export type ResolvedMedia = {
@@ -17,7 +22,15 @@ export type ResolvedMedia = {
   mimeType?: string;
 };
 
-const SUPPORTED_IMAGE_MIME = new Set(['image/jpeg', 'image/png']);
+const SUPPORTED_MIME: Record<MediaKind, Set<string>> = {
+  image: new Set(['image/jpeg', 'image/png']),
+  'imagine-image': new Set(['image/jpeg', 'image/png', 'image/webp']),
+};
+
+const ACCEPTED_FORMATS: Record<MediaKind, string> = {
+  image: 'jpg/jpeg or png',
+  'imagine-image': 'jpg/jpeg, png or webp',
+};
 
 const isHttpUrl = (s: string): boolean => /^https?:\/\//i.test(s);
 const isDataUri = (s: string): boolean => /^data:/i.test(s);
@@ -30,11 +43,11 @@ const toDataUri = (mimeType: string, buf: Buffer): string =>
  *
  * - http(s) URLs and `data:` URIs are returned unchanged.
  * - Anything else is treated as a local filesystem path: validated for existence,
- *   size (≤ `maxBytes`), and MIME type (jpg/jpeg/png only), then base64-encoded
- *   into a data URI.
+ *   size (≤ `maxBytes`), and MIME type (which formats are accepted depends on
+ *   `kind`), then base64-encoded into a data URI.
  *
  * @param input The reference to resolve.
- * @param kind  Media kind, used only for error messages today.
+ * @param kind  Media kind, selecting the accepted MIME types.
  * @param maxBytes Maximum file size in bytes.
  * @returns A {@link ResolvedMedia} ready to attach to an `input_image` content part.
  * @throws {Error} When the local file is missing, too large, or has an unsupported MIME type.
@@ -56,15 +69,15 @@ export const resolveMedia = async (
   if (stats.size > maxBytes) {
     const mb = Math.round((maxBytes / (1024 * 1024)) * 10) / 10;
     throw new Error(
-      `${kind} too large: ${input} (${stats.size} bytes > ${mb}MB limit). ` +
-        `Pass an http(s) URL instead, or raise XAI_MAX_${kind.toUpperCase()}_MB.`,
+      `image too large: ${input} (${stats.size} bytes > ${mb}MB limit). ` +
+        'Pass an http(s) URL instead, or raise XAI_MAX_IMAGE_MB.',
     );
   }
 
   const mimeType = mime.lookup(path) || 'image/png';
-  if (!SUPPORTED_IMAGE_MIME.has(mimeType)) {
+  if (!SUPPORTED_MIME[kind].has(mimeType)) {
     throw new Error(
-      `Unsupported image MIME type: ${mimeType} (${input}). xAI accepts jpg/jpeg or png.`,
+      `Unsupported image MIME type: ${mimeType} (${input}). xAI accepts ${ACCEPTED_FORMATS[kind]}.`,
     );
   }
 
