@@ -19,7 +19,7 @@ Claude Code and Codex CLI already speak MCP, so wrapping Grok as an MCP server l
 | `grok_ask` | Text + image query. `search` enables X / web search server-side |
 | `grok_list_models` | List available model IDs |
 | `grok_imagine_image` | Image generation / editing (up to 5 source images) |
-| `grok_imagine_video` | Video generation (async; polls until done by default) |
+| `grok_imagine_video` | Video generation, text-to-video or from a still (async; polls until done by default) |
 | `grok_imagine_video_status` | Poll an in-flight video generation by `request_id` |
 | `grok_estimate_cost` | Estimate USD cost from model + tokens / images / video seconds |
 
@@ -116,7 +116,7 @@ Only add `XAI_API_KEY = "xai-..."` to these files if you accept storing a plaint
 | `XAI_BASE_URL` | `https://api.x.ai/v1` | Region override / proxy (`api`) |
 | `XAI_DEFAULT_MODEL` | `grok-4.6` | Default model (`api`) |
 | `XAI_TIMEOUT_MS` | `120000` | Request / video polling / CLI timeout |
-| `XAI_MAX_IMAGE_MB` | `20` | Max image size accepted as base64 input |
+| `XAI_MAX_IMAGE_MB` | `20` | Max size of a local image file read by any tool — `grok_ask` images, `grok_imagine_image` source images, the `grok_imagine_video` still |
 | `GROK_BIN` | `grok` | Path to the `grok` CLI binary (`cli`) |
 | `GROK_CLI_MODEL` | — (the CLI's own default) | Default model passed to the `grok` CLI (`cli`) |
 
@@ -136,7 +136,7 @@ Only add `XAI_API_KEY = "xai-..."` to these files if you accept storing a plaint
 }
 ```
 
-Images may be local file paths, http(s) URLs, or data URIs. Local files are base64-encoded automatically (jpg/jpeg/png, ≤ 20 MiB). If a remote URL returns `xAI API error: 400 Fetching image failed...`, switch to a local file path — xAI's fetcher rejects some hosts. `search` toggles the server-side `x_search` / `web_search` tools via the Responses API.
+Images may be local file paths, http(s) URLs, or data URIs. Local files are base64-encoded automatically (jpg/jpeg/png, up to `XAI_MAX_IMAGE_MB`). If a remote URL returns `xAI API error: 400 Fetching image failed...`, switch to a local file path — xAI's fetcher rejects some hosts. `search` toggles the server-side `x_search` / `web_search` tools via the Responses API.
 
 ### `grok_imagine_image`
 
@@ -144,14 +144,15 @@ Images may be local file paths, http(s) URLs, or data URIs. Local files are base
 {
   "prompt": "A collage of London landmarks in a stenciled street-art style",
   "model": "grok-imagine-image-2.0",   // optional, image / image-2.0 / image-quality, default grok-imagine-image-2.0
-  "n": 1,
-  "aspect_ratio": "16:9",               // optional, "auto" lets the model choose
-  "resolution": "2k",                   // optional, 1k / 2k
+  "n": 1,                               // optional, 1-10, default 1
+  "aspect_ratio": "16:9",               // optional, default "auto" — the model picks
+  "resolution": "2k",                   // optional, 1k / 2k, default 1k
+  "quality": "medium",                  // optional, low / medium / auto, grok-imagine-image-2.0 only
   "source_images": []                   // only when editing (max 5)
 }
 ```
 
-Returns xAI-hosted signed URLs — download them if you need to keep them. Source images may be local file paths, http(s) URLs, or data URIs (jpg/jpeg, png, webp) and are referred to in the prompt as `<IMAGE_0>`, `<IMAGE_1>`, … in the order passed; editing bills for the source images as well as the generated ones.
+Returns xAI-hosted signed URLs — download them if you need to keep them. Source images may be local file paths, http(s) URLs, or data URIs (jpg/jpeg, png, webp) and are referred to in the prompt as `<IMAGE_0>`, `<IMAGE_1>`, … in the order passed; editing bills for the source images as well as the generated ones. When editing, the output aspect ratio follows the first source image unless `aspect_ratio` is set.
 
 ### `grok_imagine_video`
 
@@ -160,24 +161,26 @@ Returns xAI-hosted signed URLs — download them if you need to keep them. Sourc
   "prompt": "Cinematic drone shot over a coastal town at sunset",
   "model": "grok-imagine-video-1.5",   // optional, video / video-1.5, default grok-imagine-video-1.5
   "image": "./still.png",              // optional, animates this still instead of text-to-video
-  "duration": 6,                       // optional, 1-15, default 8
-  "aspect_ratio": "16:9",
+  "duration": 6,                       // optional, 1-15
+  "aspect_ratio": "16:9",              // optional
   "resolution": "720p",                // optional, 480p / 720p / 1080p
   "wait": true   // false to return only the request_id
 }
 ```
 
-Polls every 5 seconds within `XAI_TIMEOUT_MS`. On timeout returns `pending` — continue with `grok_imagine_video_status`. `image` takes a local file path, an http(s) URL, or a data URI (jpg/jpeg, png, webp); video *input* is not supported.
+`duration`, `aspect_ratio` and `resolution` are omitted from the request when unset, so xAI's own defaults apply.
+
+Polls every 5 seconds within `XAI_TIMEOUT_MS`. On timeout returns `pending` — continue with `grok_imagine_video_status`. A `failed` or `expired` job is returned as a tool error, with the reason xAI reported. `image` takes a local file path, an http(s) URL, or a data URI (jpg/jpeg, png, webp); video *input* is not supported.
 
 ### `grok_estimate_cost`
 
 ```jsonc
 { "model": "grok-4.6", "input_tokens": 12000, "output_tokens": 800, "cached_input_tokens": 9000 }
-{ "model": "grok-imagine-image-2.0", "image_count": 4 }
+{ "model": "grok-imagine-image-2.0", "image_count": 4, "source_image_count": 2 }
 { "model": "grok-imagine-video-1.5", "video_seconds": 10 }
 ```
 
-Uses a static pricing snapshot (2026-09-10). `cached_input_tokens` is the cheaper cached portion *of* `input_tokens`, so xAI's reported usage figures can be passed straight through. A prompt of 200,000 tokens or more moves the whole request to the model's long-context rates, which the estimate applies and reports as `tier: long-context`. Verify current rates at [docs.x.ai/developers/models](https://docs.x.ai/developers/models).
+Uses a static pricing snapshot (2026-09-10). `cached_input_tokens` is the cheaper cached portion *of* `input_tokens`, so xAI's reported usage figures can be passed straight through. A prompt of 200,000 tokens or more moves the whole request to the model's long-context rates, which the estimate applies and reports as `tier: long-context`. Edits bill for the source images too, so pass `source_image_count` to have them priced in. Verify current rates at [docs.x.ai/developers/models](https://docs.x.ai/developers/models).
 
 ## License
 
