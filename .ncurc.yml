@@ -1,0 +1,9 @@
+# Packages `ncu -u` must not raise, and why. Drop an entry once its blocker is
+# gone so the next run picks the package up again.
+#
+# Nothing is held right now: TypeScript 7 was the last entry and it builds,
+# typechecks and tests clean here, so the whole tree tracks latest.
+#
+# `cooldown` is deliberately absent — .yarnrc.yml sets npmMinimalAgeGate: 0, so
+# Yarn will install a release regardless of its age.
+reject: []

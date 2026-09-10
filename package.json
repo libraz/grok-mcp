@@ -55,16 +55,17 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
     "mime-types": "^3.0.2",
-    "openai": "^7.3.0",
-    "zod": "^4.4.3"
+    "openai": "^7.13.0",
+    "zod": "^4.6.1"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.6",
+    "@biomejs/biome": "^2.5.12",
     "@types/mime-types": "^3.0.1",
     "@types/node": "^26.1.2",
-    "@vitest/coverage-v8": "^4.1.10",
-    "npm-check-updates": "^23.0.0",
-    "typescript": "^6.0.3",
-    "vitest": "^4.1.10"
+    "@vitest/coverage-v8": "^5.0.0",
+    "npm-check-updates": "^23.1.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.2",
+    "vitest": "^5.0.0"
   }
 }
