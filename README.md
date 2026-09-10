@@ -18,7 +18,7 @@ Claude Code and Codex CLI already speak MCP, so wrapping Grok as an MCP server l
 |---|---|
 | `grok_ask` | Text + image query. `search` enables X / web search server-side |
 | `grok_list_models` | List available model IDs |
-| `grok_imagine_image` | Image generation / editing (up to 3 source images) |
+| `grok_imagine_image` | Image generation / editing (up to 5 source images) |
 | `grok_imagine_video` | Video generation (async; polls until done by default) |
 | `grok_imagine_video_status` | Poll an in-flight video generation by `request_id` |
 | `grok_estimate_cost` | Estimate USD cost from model + tokens / images / video seconds |
@@ -31,7 +31,7 @@ Claude Code and Codex CLI already speak MCP, so wrapping Grok as an MCP server l
 |---|---|---|
 | Auth | `XAI_API_KEY` | `grok login` (OAuth / subscription) — no key needed |
 | Transport | xAI REST API | local `grok` CLI subprocess |
-| Models | `grok-4.5`, `grok-4.3`, … (`grok_list_models`) | whatever the signed-in plan offers (`grok models`) |
+| Models | `grok-4.6`, `grok-4.5`, `grok-4.3`, … (`grok_list_models`) | whatever the signed-in plan offers (`grok models`) |
 | Text (`grok_ask`) | ✅ | ✅ |
 | Image input (`grok_ask` `images`) | ✅ | ❌ |
 | Web search | ✅ | ✅ (`search: "web"` / `"both"` / `true`) |
@@ -53,7 +53,7 @@ npx -y github:libraz/grok-mcp init
 
 The interactive setup writes the MCP server entry into your selected client configs. By default it does **not** store `XAI_API_KEY` in those files; keep the key in the environment used to launch your MCP client. If you explicitly opt into storing the key during `init`, the generated config file is restricted to user-only permissions where the filesystem supports it.
 
-The default model comes from `XAI_DEFAULT_MODEL` or falls back to `grok-4.3`. Pick one or more config targets (comma-separated, e.g. `1,3`):
+The default model comes from `XAI_DEFAULT_MODEL` or falls back to `grok-4.6`. Pick one or more config targets (comma-separated, e.g. `1,3`):
 
 - **Claude Code — user** (`~/.claude.json`): active across every Claude Code session
 - **Claude Code — project** (`./.mcp.json`): active only when Claude Code is opened in the current directory
@@ -89,7 +89,7 @@ Claude Code (`~/.claude.json` or `.mcp.json`):
       "command": "npx",
       "args": ["-y", "github:libraz/grok-mcp"],
       "env": {
-        "XAI_DEFAULT_MODEL": "grok-4.3"
+        "XAI_DEFAULT_MODEL": "grok-4.6"
       }
     }
   }
@@ -102,7 +102,7 @@ Codex CLI (`~/.codex/config.toml`):
 [mcp_servers.grok]
 command = "npx"
 args = ["-y", "github:libraz/grok-mcp"]
-env = { XAI_DEFAULT_MODEL = "grok-4.3" }
+env = { XAI_DEFAULT_MODEL = "grok-4.6" }
 ```
 
 Only add `XAI_API_KEY = "xai-..."` to these files if you accept storing a plaintext secret in the MCP client config.
@@ -114,7 +114,7 @@ Only add `XAI_API_KEY = "xai-..."` to these files if you accept storing a plaint
 | `XAI_BACKEND` | `api` | Response backend: `api` or `cli` |
 | `XAI_API_KEY` | — (required for `api`) | xAI API key (not used by `cli`) |
 | `XAI_BASE_URL` | `https://api.x.ai/v1` | Region override / proxy (`api`) |
-| `XAI_DEFAULT_MODEL` | `grok-4.3` | Default model (`api`) |
+| `XAI_DEFAULT_MODEL` | `grok-4.6` | Default model (`api`) |
 | `XAI_TIMEOUT_MS` | `120000` | Request / video polling / CLI timeout |
 | `XAI_MAX_IMAGE_MB` | `20` | Max image size accepted as base64 input |
 | `GROK_BIN` | `grok` | Path to the `grok` CLI binary (`cli`) |
@@ -126,9 +126,9 @@ Only add `XAI_API_KEY = "xai-..."` to these files if you accept storing a plaint
 
 ```jsonc
 {
-  "prompt": "What are the latest posts from @xai about Grok 4.3?",
+  "prompt": "What are the latest posts from @xai about Grok 4.6?",
   "images": ["https://example.com/diagram.png"],   // optional
-  "model": "grok-4.3",                              // optional
+  "model": "grok-4.6",                              // optional
   "system": "You are a concise assistant.",         // optional
   "max_tokens": 1024,                               // optional
   "temperature": 0.7,                               // optional, 0-2
@@ -143,39 +143,41 @@ Images may be local file paths, http(s) URLs, or data URIs. Local files are base
 ```jsonc
 {
   "prompt": "A collage of London landmarks in a stenciled street-art style",
-  "model": "grok-imagine-image-quality",   // optional, image / image-quality, default grok-imagine-image-quality
+  "model": "grok-imagine-image-2.0",   // optional, image / image-2.0 / image-quality, default grok-imagine-image-2.0
   "n": 1,
-  "aspect_ratio": "16:9",
-  "source_images": []                       // only when editing (max 3)
+  "aspect_ratio": "16:9",               // optional, "auto" lets the model choose
+  "resolution": "2k",                   // optional, 1k / 2k
+  "source_images": []                   // only when editing (max 5)
 }
 ```
 
-Returns xAI-hosted signed URLs — download them if you need to keep them.
+Returns xAI-hosted signed URLs — download them if you need to keep them. Source images may be local file paths, http(s) URLs, or data URIs (jpg/jpeg, png, webp) and are referred to in the prompt as `<IMAGE_0>`, `<IMAGE_1>`, … in the order passed; editing bills for the source images as well as the generated ones.
 
 ### `grok_imagine_video`
 
 ```jsonc
 {
   "prompt": "Cinematic drone shot over a coastal town at sunset",
-  "model": "grok-imagine-video",   // optional, video / video-1.5, default grok-imagine-video
-  "duration": 6,
+  "model": "grok-imagine-video-1.5",   // optional, video / video-1.5, default grok-imagine-video-1.5
+  "image": "./still.png",              // optional, animates this still instead of text-to-video
+  "duration": 6,                       // optional, 1-15, default 8
   "aspect_ratio": "16:9",
-  "resolution": "720p",
+  "resolution": "720p",                // optional, 480p / 720p / 1080p
   "wait": true   // false to return only the request_id
 }
 ```
 
-Polls every 5 seconds within `XAI_TIMEOUT_MS`. On timeout returns `pending` — continue with `grok_imagine_video_status`. Video input is not supported.
+Polls every 5 seconds within `XAI_TIMEOUT_MS`. On timeout returns `pending` — continue with `grok_imagine_video_status`. `image` takes a local file path, an http(s) URL, or a data URI (jpg/jpeg, png, webp); video *input* is not supported.
 
 ### `grok_estimate_cost`
 
 ```jsonc
-{ "model": "grok-4.3", "input_tokens": 12000, "output_tokens": 800 }
-{ "model": "grok-imagine-image-quality", "image_count": 4 }
-{ "model": "grok-imagine-video", "video_seconds": 10 }
+{ "model": "grok-4.6", "input_tokens": 12000, "output_tokens": 800, "cached_input_tokens": 9000 }
+{ "model": "grok-imagine-image-2.0", "image_count": 4 }
+{ "model": "grok-imagine-video-1.5", "video_seconds": 10 }
 ```
 
-Uses a static pricing snapshot (2026-08-01) of xAI's standard-tier rates; prompts of 200,000 tokens or more bill at the higher long-context rates, which the estimate does not apply. Verify current rates at [docs.x.ai/developers/models](https://docs.x.ai/developers/models).
+Uses a static pricing snapshot (2026-09-10). `cached_input_tokens` is the cheaper cached portion *of* `input_tokens`, so xAI's reported usage figures can be passed straight through. A prompt of 200,000 tokens or more moves the whole request to the model's long-context rates, which the estimate applies and reports as `tier: long-context`. Verify current rates at [docs.x.ai/developers/models](https://docs.x.ai/developers/models).
 
 ## License
 

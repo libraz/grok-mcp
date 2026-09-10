@@ -18,7 +18,7 @@ Claude Code・Codex CLI はすでに MCP に対応しているので、Grok を 
 |---|---|
 | `grok_ask` | テキスト + 画像のクエリ。`search` で X / Web 検索を server-side で有効化 |
 | `grok_list_models` | 利用可能なモデル ID 一覧 |
-| `grok_imagine_image` | 画像生成 / 編集（最大 3 枚の source images） |
+| `grok_imagine_image` | 画像生成 / 編集（最大 5 枚の source images） |
 | `grok_imagine_video` | 動画生成（非同期、デフォルトで完了まで polling） |
 | `grok_imagine_video_status` | 動画生成の進捗を request_id で polling |
 | `grok_estimate_cost` | モデル + トークン / 画像枚数 / 動画秒数から USD コストを推定 |
@@ -31,7 +31,7 @@ Claude Code・Codex CLI はすでに MCP に対応しているので、Grok を 
 |---|---|---|
 | 認証 | `XAI_API_KEY` | `grok login`（OAuth / サブスク）— キー不要 |
 | 経路 | xAI REST API | ローカルの `grok` CLI をサブプロセス実行 |
-| モデル | `grok-4.5`・`grok-4.3` 等（`grok_list_models`） | サインイン中のプランで使えるもの（`grok models`） |
+| モデル | `grok-4.6`・`grok-4.5`・`grok-4.3` 等（`grok_list_models`） | サインイン中のプランで使えるもの（`grok models`） |
 | テキスト（`grok_ask`） | ✅ | ✅ |
 | 画像入力（`grok_ask` の `images`） | ✅ | ❌ |
 | Web 検索 | ✅ | ✅（`search: "web"` / `"both"` / `true`） |
@@ -53,7 +53,7 @@ npx -y github:libraz/grok-mcp init
 
 対話セットアップは選択したクライアント設定に MCP サーバエントリを書き込む。デフォルトでは `XAI_API_KEY` を設定ファイルに保存しない。MCP クライアントを起動する環境でキーを管理すること。`init` 中に明示的に保存を選んだ場合だけ、キーが設定ファイルへ書かれる（対応するファイルシステムでは user-only 権限に制限する）。
 
-既定モデルは `XAI_DEFAULT_MODEL` 環境変数、未設定時は `grok-4.3` が採用される。書き込み先は以下から複数選択可（カンマ区切り、例 `1,3`）:
+既定モデルは `XAI_DEFAULT_MODEL` 環境変数、未設定時は `grok-4.6` が採用される。書き込み先は以下から複数選択可（カンマ区切り、例 `1,3`）:
 
 - **Claude Code — user** (`~/.claude.json`): Claude Code の全セッションで有効
 - **Claude Code — project** (`./.mcp.json`): カレントディレクトリで Claude Code を開いた時のみ有効
@@ -89,7 +89,7 @@ Claude Code (`~/.claude.json` または `.mcp.json`):
       "command": "npx",
       "args": ["-y", "github:libraz/grok-mcp"],
       "env": {
-        "XAI_DEFAULT_MODEL": "grok-4.3"
+        "XAI_DEFAULT_MODEL": "grok-4.6"
       }
     }
   }
@@ -102,7 +102,7 @@ Codex CLI (`~/.codex/config.toml`):
 [mcp_servers.grok]
 command = "npx"
 args = ["-y", "github:libraz/grok-mcp"]
-env = { XAI_DEFAULT_MODEL = "grok-4.3" }
+env = { XAI_DEFAULT_MODEL = "grok-4.6" }
 ```
 
 平文 secret を MCP クライアント設定に保存してよい場合だけ、`XAI_API_KEY = "xai-..."` を追加する。
@@ -114,7 +114,7 @@ env = { XAI_DEFAULT_MODEL = "grok-4.3" }
 | `XAI_BACKEND` | `api` | 応答バックエンド: `api` または `cli` |
 | `XAI_API_KEY` | —（`api` で必須） | xAI API キー（`cli` では未使用） |
 | `XAI_BASE_URL` | `https://api.x.ai/v1` | リージョン切替 / プロキシ（`api`） |
-| `XAI_DEFAULT_MODEL` | `grok-4.3` | 既定モデル（`api`） |
+| `XAI_DEFAULT_MODEL` | `grok-4.6` | 既定モデル（`api`） |
 | `XAI_TIMEOUT_MS` | `120000` | リクエスト / 動画 polling / CLI のタイムアウト |
 | `XAI_MAX_IMAGE_MB` | `20` | 画像サイズ上限 |
 | `GROK_BIN` | `grok` | `grok` CLI バイナリのパス（`cli`） |
@@ -126,9 +126,9 @@ env = { XAI_DEFAULT_MODEL = "grok-4.3" }
 
 ```jsonc
 {
-  "prompt": "What are the latest posts from @xai about Grok 4.3?",
+  "prompt": "What are the latest posts from @xai about Grok 4.6?",
   "images": ["https://example.com/diagram.png"],   // 任意
-  "model": "grok-4.3",                              // 任意
+  "model": "grok-4.6",                              // 任意
   "system": "You are a concise assistant.",         // 任意
   "max_tokens": 1024,                               // 任意
   "temperature": 0.7,                               // 任意、0-2
@@ -143,39 +143,41 @@ env = { XAI_DEFAULT_MODEL = "grok-4.3" }
 ```jsonc
 {
   "prompt": "A collage of London landmarks in a stenciled street-art style",
-  "model": "grok-imagine-image-quality",   // 任意、image / image-quality、既定は grok-imagine-image-quality
+  "model": "grok-imagine-image-2.0",   // 任意、image / image-2.0 / image-quality、既定は grok-imagine-image-2.0
   "n": 1,
-  "aspect_ratio": "16:9",
-  "source_images": []                       // 編集時のみ（最大 3 枚）
+  "aspect_ratio": "16:9",               // 任意、"auto" ならモデルに委ねる
+  "resolution": "2k",                   // 任意、1k / 2k
+  "source_images": []                   // 編集時のみ（最大 5 枚）
 }
 ```
 
-返却は xAI-hosted の署名付き URL。必要なら速やかにダウンロードすること。
+返却は xAI-hosted の署名付き URL。必要なら速やかにダウンロードすること。ソース画像はファイルパス・URL・data URI のいずれも可（jpg/jpeg・png・webp）で、プロンプト中では渡した順に `<IMAGE_0>`・`<IMAGE_1>` … として参照する。編集時は入力側の画像にも課金される。
 
 ### `grok_imagine_video`
 
 ```jsonc
 {
   "prompt": "Cinematic drone shot over a coastal town at sunset",
-  "model": "grok-imagine-video",   // 任意、video / video-1.5、既定は grok-imagine-video
-  "duration": 6,
+  "model": "grok-imagine-video-1.5",   // 任意、video / video-1.5、既定は grok-imagine-video-1.5
+  "image": "./still.png",              // 任意、指定すると静止画から動画化する
+  "duration": 6,                       // 任意、1-15、既定は 8
   "aspect_ratio": "16:9",
-  "resolution": "720p",
+  "resolution": "720p",                // 任意、480p / 720p / 1080p
   "wait": true   // false にすると request_id だけ返す
 }
 ```
 
-`XAI_TIMEOUT_MS` 内で 5 秒間隔 polling。タイムアウト時は `pending` を返すので `grok_imagine_video_status` で継続確認。動画入力は非対応。
+`XAI_TIMEOUT_MS` 内で 5 秒間隔 polling。タイムアウト時は `pending` を返すので `grok_imagine_video_status` で継続確認。`image` にはファイルパス・URL・data URI を指定できる（jpg/jpeg・png・webp）。動画そのものを入力する用途は非対応。
 
 ### `grok_estimate_cost`
 
 ```jsonc
-{ "model": "grok-4.3", "input_tokens": 12000, "output_tokens": 800 }
-{ "model": "grok-imagine-image-quality", "image_count": 4 }
-{ "model": "grok-imagine-video", "video_seconds": 10 }
+{ "model": "grok-4.6", "input_tokens": 12000, "output_tokens": 800, "cached_input_tokens": 9000 }
+{ "model": "grok-imagine-image-2.0", "image_count": 4 }
+{ "model": "grok-imagine-video-1.5", "video_seconds": 10 }
 ```
 
-静的な価格スナップショット（2026-08-01）を使用。収録しているのは標準ティアの単価で、プロンプトが 200,000 トークン以上になると適用されるロングコンテキスト料金は反映されない。最新料金は [docs.x.ai/developers/models](https://docs.x.ai/developers/models) で確認。
+静的な価格スナップショット（2026-09-10）を使用。`cached_input_tokens` は `input_tokens` のうちキャッシュから読まれた分（安価な単価で課金される内数）なので、xAI が返す usage の値をそのまま渡せる。プロンプトが 200,000 トークン以上になるとリクエスト全体がロングコンテキスト料金に切り替わり、見積もりもその単価を適用したうえで `tier: long-context` として報告する。最新料金は [docs.x.ai/developers/models](https://docs.x.ai/developers/models) で確認。
 
 ## ライセンス
 
