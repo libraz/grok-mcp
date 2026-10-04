@@ -2,6 +2,7 @@ node_modules/
 dist/
 coverage/
 docs/
+.serena/
 .DS_Store
 *.log
 
