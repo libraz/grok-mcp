@@ -24,12 +24,12 @@ jobs:
       - name: Setup Node.js (major matches mise.toml)
         uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 24
 
       - name: Enable Corepack and pin Yarn
         run: |
           corepack enable
-          corepack prepare yarn@4.18.0 --activate
+          corepack prepare yarn@4.18.1 --activate
           yarn --version
 
       - name: Restore Yarn cache
