@@ -123,6 +123,11 @@ describe('estimateCost', () => {
     expect(r.notes.some((n) => n.includes('videoSeconds was not provided'))).toBe(false);
   });
 
+  it('computes video-gen cost for the 1.5-lite model', () => {
+    const r = estimateCost({ model: 'grok-imagine-video-1.5-lite', videoSeconds: 10 });
+    expect(r.costUsd).toBeCloseTo(0.02 * 10, 6);
+  });
+
   it('computes video-gen cost by seconds', () => {
     const r = estimateCost({ model: 'grok-imagine-video', videoSeconds: 10 });
     expect(r.costUsd).toBeCloseTo(0.05 * 10, 6);
@@ -157,8 +162,8 @@ describe('estimateCost', () => {
     expect(Object.keys(MODEL_PRICING).length).toBeGreaterThanOrEqual(8);
   });
 
-  it('carries the published rates for grok-4.6', () => {
-    const p = MODEL_PRICING['grok-4.6'];
+  it.each(['grok-4.7', 'grok-4.6'])('carries the published rates for %s', (model) => {
+    const p = MODEL_PRICING[model];
     expect(p).toMatchObject({
       kind: 'text',
       contextTokens: 500_000,

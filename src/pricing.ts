@@ -41,7 +41,7 @@ export type ModelPricing =
   | ({ kind: 'video-gen' } & VideoGenPricing);
 
 /** ISO date on which the embedded pricing table was last reconciled with xAI docs. */
-export const PRICING_LAST_VERIFIED = '2026-09-10';
+export const PRICING_LAST_VERIFIED = '2026-10-04';
 
 /**
  * Prompt size, in tokens, at which xAI switches a request to long-context rates.
@@ -77,6 +77,7 @@ const textPricing = (
  * bills at that model's long-context rates.
  */
 export const MODEL_PRICING: Record<string, ModelPricing> = {
+  'grok-4.7': textPricing(500_000, 2.0, 6.0, 0.5, 4.0, 12.0, 1.0),
   'grok-4.6': textPricing(500_000, 2.0, 6.0, 0.5, 4.0, 12.0, 1.0),
   'grok-4.5': textPricing(500_000, 2.0, 6.0, 0.3, 4.0, 12.0, 0.6),
   'grok-4.3': textPricing(1_000_000, 1.25, 2.5, 0.2, 2.5, 5.0, 0.4),
@@ -89,6 +90,7 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
   'grok-imagine-image-quality': { kind: 'image-gen', perImage: 0.05 },
   'grok-imagine-video': { kind: 'video-gen', perSecond: 0.05 },
   'grok-imagine-video-1.5': { kind: 'video-gen', perSecond: 0.08 },
+  'grok-imagine-video-1.5-lite': { kind: 'video-gen', perSecond: 0.02 },
 };
 
 /** Input to {@link estimateCost}. Only the fields relevant to the model's kind are used. */
