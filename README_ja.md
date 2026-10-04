@@ -31,7 +31,7 @@ Claude Code・Codex CLI はすでに MCP に対応しているので、Grok を 
 |---|---|---|
 | 認証 | `XAI_API_KEY` | `grok login`（OAuth / サブスク）— キー不要 |
 | 経路 | xAI REST API | ローカルの `grok` CLI をサブプロセス実行 |
-| モデル | `grok-4.6`・`grok-4.5`・`grok-4.3` 等（`grok_list_models`） | サインイン中のプランで使えるもの（`grok models`） |
+| モデル | `grok-4.7`・`grok-4.6`・`grok-4.5` 等（`grok_list_models`） | サインイン中のプランで使えるもの（`grok models`） |
 | テキスト（`grok_ask`） | ✅ | ✅ |
 | 画像入力（`grok_ask` の `images`） | ✅ | ❌ |
 | Web 検索 | ✅ | ✅（`search: "web"` / `"both"` / `true`） |
@@ -53,7 +53,7 @@ npx -y github:libraz/grok-mcp init
 
 対話セットアップは選択したクライアント設定に MCP サーバエントリを書き込む。デフォルトでは `XAI_API_KEY` を設定ファイルに保存しない。MCP クライアントを起動する環境でキーを管理すること。`init` 中に明示的に保存を選んだ場合だけ、キーが設定ファイルへ書かれる（対応するファイルシステムでは user-only 権限に制限する）。
 
-既定モデルは `XAI_DEFAULT_MODEL` 環境変数、未設定時は `grok-4.6` が採用される。書き込み先は以下から複数選択可（カンマ区切り、例 `1,3`）:
+既定モデルは `XAI_DEFAULT_MODEL` 環境変数、未設定時は `grok-4.7` が採用される。書き込み先は以下から複数選択可（カンマ区切り、例 `1,3`）:
 
 - **Claude Code — user** (`~/.claude.json`): Claude Code の全セッションで有効
 - **Claude Code — project** (`./.mcp.json`): カレントディレクトリで Claude Code を開いた時のみ有効
@@ -89,7 +89,7 @@ Claude Code (`~/.claude.json` または `.mcp.json`):
       "command": "npx",
       "args": ["-y", "github:libraz/grok-mcp"],
       "env": {
-        "XAI_DEFAULT_MODEL": "grok-4.6"
+        "XAI_DEFAULT_MODEL": "grok-4.7"
       }
     }
   }
@@ -102,7 +102,7 @@ Codex CLI (`~/.codex/config.toml`):
 [mcp_servers.grok]
 command = "npx"
 args = ["-y", "github:libraz/grok-mcp"]
-env = { XAI_DEFAULT_MODEL = "grok-4.6" }
+env = { XAI_DEFAULT_MODEL = "grok-4.7" }
 ```
 
 平文 secret を MCP クライアント設定に保存してよい場合だけ、`XAI_API_KEY = "xai-..."` を追加する。
@@ -114,7 +114,7 @@ env = { XAI_DEFAULT_MODEL = "grok-4.6" }
 | `XAI_BACKEND` | `api` | 応答バックエンド: `api` または `cli` |
 | `XAI_API_KEY` | —（`api` で必須） | xAI API キー（`cli` では未使用） |
 | `XAI_BASE_URL` | `https://api.x.ai/v1` | リージョン切替 / プロキシ（`api`） |
-| `XAI_DEFAULT_MODEL` | `grok-4.6` | 既定モデル（`api`） |
+| `XAI_DEFAULT_MODEL` | `grok-4.7` | 既定モデル（`api`） |
 | `XAI_TIMEOUT_MS` | `120000` | リクエスト / 動画 polling / CLI のタイムアウト |
 | `XAI_MAX_IMAGE_MB` | `20` | ローカル画像ファイルの読み込み上限。`grok_ask` の画像・`grok_imagine_image` のソース画像・`grok_imagine_video` の静止画すべてに適用 |
 | `GROK_BIN` | `grok` | `grok` CLI バイナリのパス（`cli`） |
@@ -128,7 +128,7 @@ env = { XAI_DEFAULT_MODEL = "grok-4.6" }
 {
   "prompt": "What are the latest posts from @xai about Grok 4.6?",
   "images": ["https://example.com/diagram.png"],   // 任意
-  "model": "grok-4.6",                              // 任意
+  "model": "grok-4.7",                              // 任意
   "system": "You are a concise assistant.",         // 任意
   "max_tokens": 1024,                               // 任意
   "temperature": 0.7,                               // 任意、0-2
@@ -159,7 +159,7 @@ env = { XAI_DEFAULT_MODEL = "grok-4.6" }
 ```jsonc
 {
   "prompt": "Cinematic drone shot over a coastal town at sunset",
-  "model": "grok-imagine-video-1.5",   // 任意、video / video-1.5、既定は grok-imagine-video-1.5
+  "model": "grok-imagine-video-1.5",   // 任意、video / video-1.5 / video-1.5-lite、既定は grok-imagine-video-1.5
   "image": "./still.png",              // 任意、指定すると静止画から動画化する
   "duration": 6,                       // 任意、1-15
   "aspect_ratio": "16:9",              // 任意
@@ -175,12 +175,12 @@ env = { XAI_DEFAULT_MODEL = "grok-4.6" }
 ### `grok_estimate_cost`
 
 ```jsonc
-{ "model": "grok-4.6", "input_tokens": 12000, "output_tokens": 800, "cached_input_tokens": 9000 }
+{ "model": "grok-4.7", "input_tokens": 12000, "output_tokens": 800, "cached_input_tokens": 9000 }
 { "model": "grok-imagine-image-2.0", "image_count": 4, "source_image_count": 2 }
 { "model": "grok-imagine-video-1.5", "video_seconds": 10 }
 ```
 
-静的な価格スナップショット（2026-09-10）を使用。`cached_input_tokens` は `input_tokens` のうちキャッシュから読まれた分（安価な単価で課金される内数）なので、xAI が返す usage の値をそのまま渡せる。プロンプトが 200,000 トークン以上になるとリクエスト全体がロングコンテキスト料金に切り替わり、見積もりもその単価を適用したうえで `tier: long-context` として報告する。編集はソース画像にも課金されるので、`source_image_count` を渡せば見積もりに含まれる。最新料金は [docs.x.ai/developers/models](https://docs.x.ai/developers/models) で確認。
+静的な価格スナップショット（2026-10-04）を使用。`cached_input_tokens` は `input_tokens` のうちキャッシュから読まれた分（安価な単価で課金される内数）なので、xAI が返す usage の値をそのまま渡せる。プロンプトが 200,000 トークン以上になるとリクエスト全体がロングコンテキスト料金に切り替わり、見積もりもその単価を適用したうえで `tier: long-context` として報告する。編集はソース画像にも課金されるので、`source_image_count` を渡せば見積もりに含まれる。最新料金は [docs.x.ai/developers/models](https://docs.x.ai/developers/models) で確認。
 
 ## ライセンス
 

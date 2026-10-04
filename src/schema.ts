@@ -15,7 +15,7 @@ export const grokAskInputSchema = {
     .optional()
     .describe(
       'xAI model ID. Use `grok_list_models` to discover live model IDs. ' +
-        'Falls back to env XAI_DEFAULT_MODEL or grok-4.6.',
+        'Falls back to env XAI_DEFAULT_MODEL or grok-4.7.',
     ),
   system: z.string().optional().describe('Optional system prompt.'),
   max_tokens: z.number().int().positive().optional().describe('Maximum output tokens.'),
@@ -141,7 +141,7 @@ export const grokGenerateVideoInputSchema = {
     .optional()
     .describe(
       'Video generation model. One of: grok-imagine-video ($0.050/sec), ' +
-        'grok-imagine-video-1.5 ($0.080/sec). Defaults to grok-imagine-video-1.5.',
+        'grok-imagine-video-1.5 ($0.080/sec), grok-imagine-video-1.5-lite ($0.020/sec). Defaults to grok-imagine-video-1.5.',
     ),
   image: z
     .string()
