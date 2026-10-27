@@ -152,7 +152,7 @@ Images may be local file paths, http(s) URLs, or data URIs. Local files are base
 }
 ```
 
-Returns xAI-hosted signed URLs — download them if you need to keep them. Source images may be local file paths, http(s) URLs, or data URIs (jpg/jpeg, png, webp) and are referred to in the prompt as `<IMAGE_0>`, `<IMAGE_1>`, … in the order passed; editing bills for the source images as well as the generated ones. When editing, the output aspect ratio follows the first source image unless `aspect_ratio` is set.
+Returns xAI-hosted signed URLs — download them if you need to keep them. Source images may be local file paths, http(s) URLs, or data URIs (jpg/jpeg, png, webp) and are referred to in the prompt as `<IMAGE_0>`, `<IMAGE_1>`, … in the order passed; each source image bills at the model's per-input-image rate. When editing, the output aspect ratio follows the first source image unless `aspect_ratio` is set. `grok-imagine-image-quality` is retired on 2026-11-02; from then on xAI serves requests to it with `grok-imagine-image-2.0` at low quality.
 
 ### `grok_imagine_video`
 
@@ -161,14 +161,14 @@ Returns xAI-hosted signed URLs — download them if you need to keep them. Sourc
   "prompt": "Cinematic drone shot over a coastal town at sunset",
   "model": "grok-imagine-video-1.5",   // optional, video / video-1.5 / video-1.5-lite, default grok-imagine-video-1.5
   "image": "./still.png",              // optional, animates this still instead of text-to-video
-  "duration": 6,                       // optional, 1-15
-  "aspect_ratio": "16:9",              // optional
-  "resolution": "720p",                // optional, 480p / 720p / 1080p
+  "duration": 6,                       // optional, 1-15, default 8
+  "aspect_ratio": "16:9",              // optional, also 21:9 / 5:2 etc., default 16:9
+  "resolution": "720p",                // optional, 480p / 720p / 1080p, default 480p
   "wait": true   // false to return only the request_id
 }
 ```
 
-`duration`, `aspect_ratio` and `resolution` are omitted from the request when unset, so xAI's own defaults apply.
+`duration`, `aspect_ratio` and `resolution` are omitted from the request when unset, so xAI's own defaults apply. `grok-imagine-video` renders up to 720p, and image-to-video output follows the still's aspect ratio.
 
 Polls every 5 seconds within `XAI_TIMEOUT_MS`. On timeout returns `pending` — continue with `grok_imagine_video_status`. A `failed` or `expired` job is returned as a tool error, with the reason xAI reported. `image` takes a local file path, an http(s) URL, or a data URI (jpg/jpeg, png, webp); video *input* is not supported.
 
@@ -176,11 +176,11 @@ Polls every 5 seconds within `XAI_TIMEOUT_MS`. On timeout returns `pending` — 
 
 ```jsonc
 { "model": "grok-4.7", "input_tokens": 12000, "output_tokens": 800, "cached_input_tokens": 9000 }
-{ "model": "grok-imagine-image-2.0", "image_count": 4, "source_image_count": 2 }
-{ "model": "grok-imagine-video-1.5", "video_seconds": 10 }
+{ "model": "grok-imagine-image-2.0", "image_count": 4, "source_image_count": 2, "resolution": "2k", "quality": "medium" }
+{ "model": "grok-imagine-video-1.5", "video_seconds": 10, "resolution": "720p" }
 ```
 
-Uses a static pricing snapshot (2026-10-04). `cached_input_tokens` is the cheaper cached portion *of* `input_tokens`, so xAI's reported usage figures can be passed straight through. A prompt of 200,000 tokens or more moves the whole request to the model's long-context rates, which the estimate applies and reports as `tier: long-context`. Edits bill for the source images too, so pass `source_image_count` to have them priced in. Verify current rates at [docs.x.ai/developers/models](https://docs.x.ai/developers/models).
+Uses a static pricing snapshot (2026-10-28). `cached_input_tokens` is the cheaper cached portion *of* `input_tokens`, so xAI's reported usage figures can be passed straight through. A prompt of 200,000 tokens or more moves the whole request to the model's long-context rates, which the estimate applies and reports as `tier: long-context`. Image and video rates depend on `resolution` (and `quality` for `grok-imagine-image-2.0`), defaulting to what xAI renders when unset; a video without `video_seconds` is priced at the default 8 seconds. Source images (an edit's inputs or an image-to-video still) bill at a separate per-input-image rate, so pass `source_image_count` to have them priced in. Verify current rates at [docs.x.ai/developers/models](https://docs.x.ai/developers/models).
 
 ## License
 

@@ -152,7 +152,7 @@ env = { XAI_DEFAULT_MODEL = "grok-4.7" }
 }
 ```
 
-返却は xAI-hosted の署名付き URL。必要なら速やかにダウンロードすること。ソース画像はファイルパス・URL・data URI のいずれも可（jpg/jpeg・png・webp）で、プロンプト中では渡した順に `<IMAGE_0>`・`<IMAGE_1>` … として参照する。編集時は入力側の画像にも課金される。また編集時の出力アスペクト比は、`aspect_ratio` を明示しない限り 1 枚目のソース画像に従う。
+返却は xAI-hosted の署名付き URL。必要なら速やかにダウンロードすること。ソース画像はファイルパス・URL・data URI のいずれも可（jpg/jpeg・png・webp）で、プロンプト中では渡した順に `<IMAGE_0>`・`<IMAGE_1>` … として参照する。編集時はソース画像 1 枚ごとにモデルの入力画像単価が課金される。また編集時の出力アスペクト比は、`aspect_ratio` を明示しない限り 1 枚目のソース画像に従う。`grok-imagine-image-quality` は 2026-11-02 に退役し、以降このモデル宛てのリクエストは xAI 側で `grok-imagine-image-2.0` の low quality として処理される。
 
 ### `grok_imagine_video`
 
@@ -161,14 +161,14 @@ env = { XAI_DEFAULT_MODEL = "grok-4.7" }
   "prompt": "Cinematic drone shot over a coastal town at sunset",
   "model": "grok-imagine-video-1.5",   // 任意、video / video-1.5 / video-1.5-lite、既定は grok-imagine-video-1.5
   "image": "./still.png",              // 任意、指定すると静止画から動画化する
-  "duration": 6,                       // 任意、1-15
-  "aspect_ratio": "16:9",              // 任意
-  "resolution": "720p",                // 任意、480p / 720p / 1080p
+  "duration": 6,                       // 任意、1-15、既定は 8
+  "aspect_ratio": "16:9",              // 任意、21:9 / 5:2 なども可、既定は 16:9
+  "resolution": "720p",                // 任意、480p / 720p / 1080p、既定は 480p
   "wait": true   // false にすると request_id だけ返す
 }
 ```
 
-`duration`・`aspect_ratio`・`resolution` は未指定ならリクエストに含めないので、xAI 側の既定値が適用される。
+`duration`・`aspect_ratio`・`resolution` は未指定ならリクエストに含めないので、xAI 側の既定値が適用される。`grok-imagine-video` の上限は 720p。静止画から動画化する場合、出力のアスペクト比は静止画に従う。
 
 `XAI_TIMEOUT_MS` 内で 5 秒間隔 polling。タイムアウト時は `pending` を返すので `grok_imagine_video_status` で継続確認。`failed` / `expired` で終わったジョブは xAI が返した理由を添えてツールエラーとして返す。`image` にはファイルパス・URL・data URI を指定できる（jpg/jpeg・png・webp）。動画そのものを入力する用途は非対応。
 
@@ -176,11 +176,11 @@ env = { XAI_DEFAULT_MODEL = "grok-4.7" }
 
 ```jsonc
 { "model": "grok-4.7", "input_tokens": 12000, "output_tokens": 800, "cached_input_tokens": 9000 }
-{ "model": "grok-imagine-image-2.0", "image_count": 4, "source_image_count": 2 }
-{ "model": "grok-imagine-video-1.5", "video_seconds": 10 }
+{ "model": "grok-imagine-image-2.0", "image_count": 4, "source_image_count": 2, "resolution": "2k", "quality": "medium" }
+{ "model": "grok-imagine-video-1.5", "video_seconds": 10, "resolution": "720p" }
 ```
 
-静的な価格スナップショット（2026-10-04）を使用。`cached_input_tokens` は `input_tokens` のうちキャッシュから読まれた分（安価な単価で課金される内数）なので、xAI が返す usage の値をそのまま渡せる。プロンプトが 200,000 トークン以上になるとリクエスト全体がロングコンテキスト料金に切り替わり、見積もりもその単価を適用したうえで `tier: long-context` として報告する。編集はソース画像にも課金されるので、`source_image_count` を渡せば見積もりに含まれる。最新料金は [docs.x.ai/developers/models](https://docs.x.ai/developers/models) で確認。
+静的な価格スナップショット（2026-10-28）を使用。`cached_input_tokens` は `input_tokens` のうちキャッシュから読まれた分（安価な単価で課金される内数）なので、xAI が返す usage の値をそのまま渡せる。プロンプトが 200,000 トークン以上になるとリクエスト全体がロングコンテキスト料金に切り替わり、見積もりもその単価を適用したうえで `tier: long-context` として報告する。画像・動画の単価は `resolution`（`grok-imagine-image-2.0` は `quality` も）で決まり、未指定なら xAI の既定値で計算する。`video_seconds` を省いた動画は既定の 8 秒として見積もる。ソース画像（編集の入力や動画化する静止画）は別建ての入力画像単価で課金されるので、`source_image_count` を渡せば見積もりに含まれる。最新料金は [docs.x.ai/developers/models](https://docs.x.ai/developers/models) で確認。
 
 ## ライセンス
 
