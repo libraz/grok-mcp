@@ -1,4 +1,12 @@
 import { z } from 'zod';
+import {
+  IMAGE_QUALITIES,
+  IMAGE_RESOLUTIONS,
+  type ImageQuality,
+  type ImageResolution,
+  VIDEO_RESOLUTIONS,
+  type VideoResolution,
+} from './pricing.js';
 
 /** Zod input schema for the `grok_ask` tool. Pass to `McpServer.registerTool`. */
 export const grokAskInputSchema = {
@@ -79,7 +87,9 @@ export const grokGenerateImageInputSchema = {
     .optional()
     .describe(
       'Image generation model. One of: grok-imagine-image ($0.02/img), ' +
-        'grok-imagine-image-2.0 ($0.04/img), grok-imagine-image-quality ($0.05/img). ' +
+        'grok-imagine-image-2.0 ($0.04-$0.08/img by resolution and quality), ' +
+        'grok-imagine-image-quality ($0.05-$0.07/img; retired on 2026-11-02, after which ' +
+        'xAI serves it with grok-imagine-image-2.0 at low quality). ' +
         'Defaults to grok-imagine-image-2.0.',
     ),
   n: z.number().int().min(1).max(10).optional().describe('Number of images (1-10). Defaults to 1.'),
@@ -91,11 +101,11 @@ export const grokGenerateImageInputSchema = {
         'when editing, the output follows the first source image unless this is set.',
     ),
   resolution: z
-    .enum(['1k', '2k'])
+    .enum(IMAGE_RESOLUTIONS)
     .optional()
     .describe('Output resolution of the generated image. Defaults to 1k.'),
   quality: z
-    .enum(['low', 'medium', 'auto'])
+    .enum(IMAGE_QUALITIES)
     .optional()
     .describe(
       'Rendering quality. Only supported by grok-imagine-image-2.0. Defaults to `auto`, ' +
@@ -108,8 +118,8 @@ export const grokGenerateImageInputSchema = {
     .describe(
       'Optional source images for editing (up to 5), each a local file path, an http(s) URL, ' +
         'or a data URI (jpg/jpeg, png or webp). When provided, the /v1/images/edits endpoint ' +
-        'is used instead of /v1/images/generations, and source images are billed alongside ' +
-        'the generated ones.',
+        'is used instead of /v1/images/generations, and each source image is billed at the ' +
+        "model's per-input-image rate.",
     ),
 };
 
@@ -119,13 +129,23 @@ export type GrokGenerateImageInput = {
   model?: string;
   n?: number;
   aspect_ratio?: (typeof IMAGE_ASPECT_RATIOS)[number];
-  resolution?: '1k' | '2k';
-  quality?: 'low' | 'medium' | 'auto';
+  resolution?: ImageResolution;
+  quality?: ImageQuality;
   source_images?: string[];
 };
 
 /** Aspect ratios accepted by the video generation endpoint. */
-const VIDEO_ASPECT_RATIOS = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'] as const;
+const VIDEO_ASPECT_RATIOS = [
+  '1:1',
+  '16:9',
+  '9:16',
+  '4:3',
+  '3:4',
+  '3:2',
+  '2:3',
+  '21:9',
+  '5:2',
+] as const;
 
 /** Zod input schema for the `grok_imagine_video` tool. */
 export const grokGenerateVideoInputSchema = {
@@ -140,8 +160,10 @@ export const grokGenerateVideoInputSchema = {
     .string()
     .optional()
     .describe(
-      'Video generation model. One of: grok-imagine-video ($0.050/sec), ' +
-        'grok-imagine-video-1.5 ($0.080/sec), grok-imagine-video-1.5-lite ($0.020/sec). Defaults to grok-imagine-video-1.5.',
+      'Video generation model. One of: grok-imagine-video ($0.05-$0.07/sec, up to 720p), ' +
+        'grok-imagine-video-1.5 ($0.08-$0.25/sec), grok-imagine-video-1.5-lite ' +
+        '($0.02-$0.14/sec, 1080p upscaled from 720p). Rates rise with resolution. ' +
+        'Defaults to grok-imagine-video-1.5.',
     ),
   image: z
     .string()
@@ -158,15 +180,17 @@ export const grokGenerateVideoInputSchema = {
     .min(1)
     .max(15)
     .optional()
-    .describe('Duration in seconds (1-15). Omitted values fall back to the xAI default.'),
+    .describe('Duration in seconds (1-15). Defaults to 8.'),
   aspect_ratio: z
     .enum(VIDEO_ASPECT_RATIOS)
     .optional()
-    .describe('Aspect ratio. Omitted values fall back to the xAI default.'),
+    .describe(
+      'Aspect ratio. Defaults to 16:9. Ignored for image-to-video, whose output follows the still.',
+    ),
   resolution: z
-    .enum(['480p', '720p', '1080p'])
+    .enum(VIDEO_RESOLUTIONS)
     .optional()
-    .describe('Output resolution. Omitted values fall back to the xAI default.'),
+    .describe('Output resolution. Defaults to 480p; grok-imagine-video supports up to 720p.'),
   wait: z
     .boolean()
     .optional()
@@ -183,7 +207,7 @@ export type GrokGenerateVideoInput = {
   image?: string;
   duration?: number;
   aspect_ratio?: (typeof VIDEO_ASPECT_RATIOS)[number];
-  resolution?: '480p' | '720p' | '1080p';
+  resolution?: VideoResolution;
   wait?: boolean;
 };
 
@@ -233,14 +257,28 @@ export const grokEstimateCostInputSchema = {
     .nonnegative()
     .optional()
     .describe(
-      'Number of source images passed to an edit (for image generation models). Edits bill ' +
-        'for the source images as well as the generated ones, so include them here.',
+      'Number of source images passed in: the sources of an image edit, or the still of an ' +
+        'image-to-video request. They bill at the per-input-image rate, so include them here.',
     ),
   video_seconds: z
     .number()
     .nonnegative()
     .optional()
-    .describe('Video length in seconds (for video generation models).'),
+    .describe('Video length in seconds (for video generation models). Defaults to 8.'),
+  resolution: z
+    .enum([...IMAGE_RESOLUTIONS, ...VIDEO_RESOLUTIONS])
+    .optional()
+    .describe(
+      'Output resolution: 1k / 2k for image models (default 1k), 480p / 720p / 1080p for ' +
+        'video models (default 480p). Rates rise with resolution.',
+    ),
+  quality: z
+    .enum(IMAGE_QUALITIES)
+    .optional()
+    .describe(
+      'Rendering quality, for grok-imagine-image-2.0. Defaults to `auto`: low for generation, ' +
+        'medium for editing.',
+    ),
 };
 
 /** Parsed input type for the `grok_estimate_cost` tool. */
@@ -252,4 +290,6 @@ export type GrokEstimateCostInput = {
   image_count?: number;
   source_image_count?: number;
   video_seconds?: number;
+  resolution?: ImageResolution | VideoResolution;
+  quality?: ImageQuality;
 };

@@ -22,16 +22,39 @@ export type TokenPricing = TokenRates & {
   longContext: TokenRates;
 };
 
+/** Output resolutions an image-generation model can be asked for. */
+export const IMAGE_RESOLUTIONS = ['1k', '2k'] as const;
+export type ImageResolution = (typeof IMAGE_RESOLUTIONS)[number];
+
+/** Output resolutions a video-generation model can be asked for. */
+export const VIDEO_RESOLUTIONS = ['480p', '720p', '1080p'] as const;
+export type VideoResolution = (typeof VIDEO_RESOLUTIONS)[number];
+
+/** Rendering quality accepted by image models that take the `quality` parameter. */
+export const IMAGE_QUALITIES = ['low', 'medium', 'auto'] as const;
+export type ImageQuality = (typeof IMAGE_QUALITIES)[number];
+
+const isImageResolution = (r: string): r is ImageResolution =>
+  (IMAGE_RESOLUTIONS as readonly string[]).includes(r);
+const isVideoResolution = (r: string): r is VideoResolution =>
+  (VIDEO_RESOLUTIONS as readonly string[]).includes(r);
+
 /** USD pricing for an image-generation model. */
 export type ImageGenPricing = {
-  /** USD per generated image. */
-  perImage: number;
+  /** USD per source image passed to an edit. */
+  perInputImage: number;
+  /** USD per generated image, by output resolution. Low-quality rates where quality applies. */
+  perImage: Record<ImageResolution, number>;
+  /** USD per generated image at medium quality. Set only on models that take `quality`. */
+  perImageMedium?: Record<ImageResolution, number>;
 };
 
 /** USD pricing for a video-generation model. */
 export type VideoGenPricing = {
-  /** USD per second of generated video. */
-  perSecond: number;
+  /** USD per source still passed to image-to-video. */
+  perInputImage: number;
+  /** USD per second of generated video, by output resolution. Absent for unsupported ones. */
+  perSecond: Partial<Record<VideoResolution, number>>;
 };
 
 /** Discriminated union of all supported pricing shapes. */
@@ -41,13 +64,20 @@ export type ModelPricing =
   | ({ kind: 'video-gen' } & VideoGenPricing);
 
 /** ISO date on which the embedded pricing table was last reconciled with xAI docs. */
-export const PRICING_LAST_VERIFIED = '2026-10-04';
+export const PRICING_LAST_VERIFIED = '2026-10-28';
 
 /**
  * Prompt size, in tokens, at which xAI switches a request to long-context rates.
  * Once the prompt reaches it, every token of the request bills at the higher tier.
  */
 export const LONG_CONTEXT_THRESHOLD_TOKENS = 200_000;
+
+/** Resolutions xAI renders at when the request leaves `resolution` unset. */
+const DEFAULT_IMAGE_RESOLUTION: ImageResolution = '1k';
+const DEFAULT_VIDEO_RESOLUTION: VideoResolution = '480p';
+
+/** Clip length, in seconds, xAI renders when the request leaves `duration` unset. */
+const DEFAULT_VIDEO_SECONDS = 8;
 
 /** Text-model rates, given as the standard tier plus its long-context counterpart. */
 const textPricing = (
@@ -85,12 +115,37 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
   'grok-4.20-0309-non-reasoning': textPricing(1_000_000, 1.25, 2.5, 0.2, 2.5, 5.0, 0.4),
   'grok-4.20-multi-agent-0309': textPricing(1_000_000, 1.25, 2.5, 0.2, 2.5, 5.0, 0.4),
   'grok-build-0.1': textPricing(256_000, 1.0, 2.0, 0.2, 2.0, 4.0, 0.4),
-  'grok-imagine-image': { kind: 'image-gen', perImage: 0.02 },
-  'grok-imagine-image-2.0': { kind: 'image-gen', perImage: 0.04 },
-  'grok-imagine-image-quality': { kind: 'image-gen', perImage: 0.05 },
-  'grok-imagine-video': { kind: 'video-gen', perSecond: 0.05 },
-  'grok-imagine-video-1.5': { kind: 'video-gen', perSecond: 0.08 },
-  'grok-imagine-video-1.5-lite': { kind: 'video-gen', perSecond: 0.02 },
+  'grok-imagine-image': {
+    kind: 'image-gen',
+    perInputImage: 0.002,
+    perImage: { '1k': 0.02, '2k': 0.02 },
+  },
+  'grok-imagine-image-2.0': {
+    kind: 'image-gen',
+    perInputImage: 0.01,
+    perImage: { '1k': 0.04, '2k': 0.06 },
+    perImageMedium: { '1k': 0.06, '2k': 0.08 },
+  },
+  'grok-imagine-image-quality': {
+    kind: 'image-gen',
+    perInputImage: 0.01,
+    perImage: { '1k': 0.05, '2k': 0.07 },
+  },
+  'grok-imagine-video': {
+    kind: 'video-gen',
+    perInputImage: 0.002,
+    perSecond: { '480p': 0.05, '720p': 0.07 },
+  },
+  'grok-imagine-video-1.5': {
+    kind: 'video-gen',
+    perInputImage: 0.01,
+    perSecond: { '480p': 0.08, '720p': 0.14, '1080p': 0.25 },
+  },
+  'grok-imagine-video-1.5-lite': {
+    kind: 'video-gen',
+    perInputImage: 0.01,
+    perSecond: { '480p': 0.02, '720p': 0.03, '1080p': 0.14 },
+  },
 };
 
 /** Input to {@link estimateCost}. Only the fields relevant to the model's kind are used. */
@@ -106,12 +161,16 @@ export type EstimateInput = {
   /** Number of images to generate, for image-generation models. Defaults to 1. */
   imageCount?: number;
   /**
-   * Number of source images passed to an edit, for image-generation models.
-   * Edits bill for the sources as well as the generated images.
+   * Number of source images passed in: the sources of an image edit, or the still of an
+   * image-to-video request. They bill at the model's per-input-image rate.
    */
   sourceImageCount?: number;
-  /** Video length in seconds, for video-generation models. */
+  /** Video length in seconds, for video-generation models. Defaults to xAI's 8 seconds. */
   videoSeconds?: number;
+  /** Output resolution, for image (`1k`/`2k`) and video (`480p`/`720p`/`1080p`) models. */
+  resolution?: ImageResolution | VideoResolution;
+  /** Rendering quality, for image models that take it. `auto` is low unless editing. */
+  quality?: ImageQuality;
 };
 
 /** Output of {@link estimateCost}. */
@@ -143,8 +202,9 @@ const round = (n: number, digits = 6): number => {
  * applies automatically. `cachedInputTokens` is treated as a subset of `inputTokens` —
  * pass xAI's reported usage figures straight through.
  *
- * Image models bill per image on both sides of an edit: `imageCount` covers the generated
- * images and `sourceImageCount` the ones passed in.
+ * Image and video models bill by output resolution (and, for models that take it, by
+ * quality), defaulting to what xAI renders when the request leaves them unset. Source images
+ * — an edit's inputs or an image-to-video still — bill at the separate per-input-image rate.
  *
  * Always succeeds: unknown models return `knownPricing: false` with a `costUsd` of 0
  * and a note pointing to `grok_list_models`. The result includes a "verify pricing at
@@ -222,16 +282,34 @@ export const estimateCost = (input: EstimateInput): EstimateResult => {
   } else if (pricing.kind === 'image-gen') {
     const n = input.imageCount ?? 1;
     const sources = input.sourceImageCount ?? 0;
-    const genCost = n * pricing.perImage;
-    const sourceCost = sources * pricing.perImage;
-    total = genCost + sourceCost;
-    breakdown.push(`generated images: ${n} × $${pricing.perImage}/image = $${round(genCost)}`);
-    if (sources > 0) {
-      breakdown.push(
-        `source images: ${sources} × $${pricing.perImage}/image = $${round(sourceCost)}`,
-      );
+    const resolution = input.resolution ?? DEFAULT_IMAGE_RESOLUTION;
+    let rates = pricing.perImage;
+    let label: string = resolution;
+    if (pricing.perImageMedium) {
+      const requested = input.quality ?? 'auto';
+      const quality = requested === 'auto' ? (sources > 0 ? 'medium' : 'low') : requested;
+      if (quality === 'medium') {
+        rates = pricing.perImageMedium;
+      }
+      label = `${resolution}, ${quality} quality`;
+    } else if (input.quality !== undefined) {
+      notes.push(`quality=${input.quality} provided but ${input.model} does not take it; ignored.`);
+    }
+    const rate = isImageResolution(resolution) ? rates[resolution] : undefined;
+    if (rate === undefined) {
       notes.push(
-        'Image edits bill per image on both sides, so the source images are charged above alongside the generated ones.',
+        `${input.model} has no rate for resolution ${resolution}; expected one of ${IMAGE_RESOLUTIONS.join(', ')}. Generated images are not priced.`,
+      );
+    } else {
+      const genCost = n * rate;
+      total += genCost;
+      breakdown.push(`generated images: ${n} × $${rate}/image (${label}) = $${round(genCost)}`);
+    }
+    if (sources > 0) {
+      const sourceCost = sources * pricing.perInputImage;
+      total += sourceCost;
+      breakdown.push(
+        `source images: ${sources} × $${pricing.perInputImage}/image = $${round(sourceCost)}`,
       );
     } else {
       notes.push(
@@ -239,12 +317,29 @@ export const estimateCost = (input: EstimateInput): EstimateResult => {
       );
     }
   } else {
-    const secs = input.videoSeconds ?? 0;
-    total = secs * pricing.perSecond;
-    breakdown.push(`video: ${secs}s × $${pricing.perSecond}/s = $${round(total)}`);
+    const secs = input.videoSeconds ?? DEFAULT_VIDEO_SECONDS;
+    const sources = input.sourceImageCount ?? 0;
+    const resolution = input.resolution ?? DEFAULT_VIDEO_RESOLUTION;
+    const rate = isVideoResolution(resolution) ? pricing.perSecond[resolution] : undefined;
+    if (rate === undefined) {
+      notes.push(
+        `${input.model} has no rate for resolution ${resolution}; it renders at ${Object.keys(pricing.perSecond).join(', ')}. The video is not priced.`,
+      );
+    } else {
+      const videoCost = secs * rate;
+      total += videoCost;
+      breakdown.push(`video: ${secs}s × $${rate}/s (${resolution}) = $${round(videoCost)}`);
+    }
+    if (sources > 0) {
+      const sourceCost = sources * pricing.perInputImage;
+      total += sourceCost;
+      breakdown.push(
+        `source image: ${sources} × $${pricing.perInputImage}/image = $${round(sourceCost)}`,
+      );
+    }
     if (input.videoSeconds === undefined) {
       notes.push(
-        'videoSeconds was not provided, so this estimate is $0. Pass the intended clip length in seconds (1-15).',
+        `videoSeconds was not provided, so the estimate assumes xAI's default clip length of ${DEFAULT_VIDEO_SECONDS}s.`,
       );
     }
   }

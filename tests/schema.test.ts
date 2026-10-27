@@ -93,6 +93,12 @@ describe('grok_imagine_video schema', () => {
     expect(() => videoObj.parse({ prompt: 'x', resolution: '4k' })).toThrow();
   });
 
+  it('accepts the wide aspect ratios', () => {
+    expect(videoObj.parse({ prompt: 'x', aspect_ratio: '21:9' }).aspect_ratio).toBe('21:9');
+    expect(videoObj.parse({ prompt: 'x', aspect_ratio: '5:2' }).aspect_ratio).toBe('5:2');
+    expect(() => videoObj.parse({ prompt: 'x', aspect_ratio: '9:19.5' })).toThrow();
+  });
+
   it('accepts an optional source image for image-to-video', () => {
     expect(videoObj.parse({ prompt: 'x', image: '/tmp/still.png' }).image).toBe('/tmp/still.png');
     expect(() => videoObj.parse({ prompt: 'x', image: '' })).toThrow();
@@ -117,6 +123,10 @@ describe('grok_estimate_cost schema', () => {
     expect(() => costObj.parse({ model: 'm', source_image_count: -1 })).toThrow();
   });
 
+  it('rejects a resolution neither image nor video models offer', () => {
+    expect(() => costObj.parse({ model: 'm', resolution: '4k' })).toThrow();
+  });
+
   it('accepts all optional fields', () => {
     const parsed = costObj.parse({
       model: 'grok-4.6',
@@ -126,8 +136,12 @@ describe('grok_estimate_cost schema', () => {
       image_count: 2,
       source_image_count: 3,
       video_seconds: 3,
+      resolution: '720p',
+      quality: 'medium',
     });
     expect(parsed.model).toBe('grok-4.6');
+    expect(parsed.resolution).toBe('720p');
+    expect(parsed.quality).toBe('medium');
     expect(parsed.input_tokens).toBe(100);
     expect(parsed.cached_input_tokens).toBe(20);
     expect(parsed.source_image_count).toBe(3);

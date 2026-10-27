@@ -86,18 +86,17 @@ describe('estimateCost', () => {
     expect(r.costUsd).toBeCloseTo(0.02 * 4, 6);
   });
 
-  it('bills source images alongside the generated ones', () => {
+  it('bills source images at the per-input-image rate and edits at medium quality', () => {
     const r = estimateCost({
       model: 'grok-imagine-image-2.0',
       imageCount: 2,
       sourceImageCount: 3,
     });
-    expect(r.costUsd).toBeCloseTo(0.04 * 5, 6);
+    expect(r.costUsd).toBeCloseTo(0.06 * 2 + 0.01 * 3, 6);
     expect(r.breakdown).toEqual([
-      'generated images: 2 × $0.04/image = $0.08',
-      'source images: 3 × $0.04/image = $0.12',
+      'generated images: 2 × $0.06/image (1k, medium quality) = $0.12',
+      'source images: 3 × $0.01/image = $0.03',
     ]);
-    expect(r.notes.some((n) => n.includes('both sides'))).toBe(true);
   });
 
   it('prompts for sourceImageCount when it is omitted', () => {
@@ -133,11 +132,88 @@ describe('estimateCost', () => {
     expect(r.costUsd).toBeCloseTo(0.05 * 10, 6);
   });
 
-  it('warns instead of silently estimating $0 when videoSeconds is missing', () => {
+  it('assumes the default 8-second clip when videoSeconds is missing', () => {
     const r = estimateCost({ model: 'grok-imagine-video-1.5' });
-    expect(r.costUsd).toBe(0);
+    expect(r.costUsd).toBeCloseTo(0.08 * 8, 6);
     expect(r.notes.some((n) => n.includes('videoSeconds was not provided'))).toBe(true);
   });
+
+  // Pairwise over model × resolution × quality × source count; n defaults to 1.
+  it.each([
+    ['grok-imagine-image-quality', undefined, 'medium', 0, 0.05],
+    ['grok-imagine-image', '2k', 'medium', 2, 0.024],
+    ['grok-imagine-image-quality', '1k', 'auto', 2, 0.07],
+    ['grok-imagine-image-2.0', '2k', undefined, 0, 0.06],
+    ['grok-imagine-image', '1k', 'low', 0, 0.02],
+    ['grok-imagine-image-quality', undefined, undefined, 2, 0.07],
+    ['grok-imagine-image-2.0', '1k', 'medium', 2, 0.08],
+    ['grok-imagine-image-2.0', undefined, 'low', 2, 0.06],
+    ['grok-imagine-image', undefined, 'auto', 0, 0.02],
+    ['grok-imagine-image-quality', '2k', 'low', 0, 0.07],
+    ['grok-imagine-image-2.0', '1k', 'auto', 0, 0.04],
+    ['grok-imagine-image', undefined, undefined, 0, 0.02],
+    ['grok-imagine-image', '1k', undefined, 2, 0.024],
+    ['grok-imagine-image-2.0', '2k', 'auto', 0, 0.06],
+    ['grok-imagine-image', '720p', undefined, 0, 0],
+    ['grok-imagine-image-2.0', '720p', undefined, 0, 0],
+    ['grok-imagine-image-quality', '720p', undefined, 0, 0],
+    ['grok-imagine-image', '720p', 'low', 0, 0],
+    ['grok-imagine-image', '720p', 'medium', 0, 0],
+    ['grok-imagine-image', '720p', 'auto', 0, 0],
+    ['grok-imagine-image', '720p', undefined, 2, 0.004],
+  ] as const)(
+    'prices %s at resolution=%s quality=%s with %i sources as $%d',
+    (model, resolution, quality, sources, cost) => {
+      const r = estimateCost({
+        model,
+        sourceImageCount: sources,
+        ...(resolution && { resolution }),
+        ...(quality && { quality }),
+      });
+      expect(r.costUsd).toBeCloseTo(cost, 6);
+      expect(r.notes.some((n) => n.includes('has no rate for resolution'))).toBe(
+        resolution === '720p',
+      );
+      expect(r.notes.some((n) => n.includes('does not take it'))).toBe(
+        quality !== undefined && model !== 'grok-imagine-image-2.0',
+      );
+    },
+  );
+
+  // Pairwise over model × resolution × source still × clip length (default 8s).
+  it.each([
+    ['grok-imagine-video-1.5-lite', '720p', 0, undefined, 0.24],
+    ['grok-imagine-video', '480p', 0, 5, 0.25],
+    ['grok-imagine-video-1.5-lite', '1080p', 1, 5, 0.71],
+    ['grok-imagine-video-1.5', '480p', 1, undefined, 0.65],
+    ['grok-imagine-video-1.5', '720p', 0, 5, 0.7],
+    ['grok-imagine-video-1.5-lite', undefined, 0, 5, 0.1],
+    ['grok-imagine-video', undefined, 1, undefined, 0.402],
+    ['grok-imagine-video', '1080p', 0, undefined, 0],
+    ['grok-imagine-video', '720p', 1, undefined, 0.562],
+    ['grok-imagine-video-1.5', '1080p', 0, 5, 1.25],
+    ['grok-imagine-video-1.5', undefined, 1, 5, 0.41],
+    ['grok-imagine-video-1.5-lite', '480p', 1, undefined, 0.17],
+    ['grok-imagine-video', '2k', 0, undefined, 0],
+    ['grok-imagine-video-1.5', '2k', 0, undefined, 0],
+    ['grok-imagine-video-1.5-lite', '2k', 0, undefined, 0],
+    ['grok-imagine-video', '2k', 1, undefined, 0.002],
+    ['grok-imagine-video', '2k', 0, 5, 0],
+  ] as const)(
+    'prices %s at resolution=%s with %i stills for %ss as $%d',
+    (model, resolution, sources, seconds, cost) => {
+      const r = estimateCost({
+        model,
+        sourceImageCount: sources,
+        ...(resolution && { resolution }),
+        ...(seconds !== undefined && { videoSeconds: seconds }),
+      });
+      expect(r.costUsd).toBeCloseTo(cost, 6);
+      expect(r.notes.some((n) => n.includes('has no rate for resolution'))).toBe(
+        resolution === '2k' || (model === 'grok-imagine-video' && resolution === '1080p'),
+      );
+    },
+  );
 
   it('flags unknown models without throwing', () => {
     const r = estimateCost({ model: 'grok-unknown-vNext', inputTokens: 1000 });

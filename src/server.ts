@@ -161,6 +161,8 @@ export const createServer = (config: Config): McpServer => {
             sourceImageCount: args.source_image_count,
           }),
           ...(args.video_seconds !== undefined && { videoSeconds: args.video_seconds }),
+          ...(args.resolution && { resolution: args.resolution }),
+          ...(args.quality && { quality: args.quality }),
         });
         const lines = [
           `model: ${r.model}`,

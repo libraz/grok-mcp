@@ -367,7 +367,7 @@ describe('grok_estimate_cost tool', () => {
     });
 
     expect(r.isError).toBeUndefined();
-    expect(r.content[0]?.text).toContain('estimated cost: $0.2');
+    expect(r.content[0]?.text).toContain('estimated cost: $0.15');
     expect(r.content[0]?.text).toContain('generated images: 2');
     expect(r.content[0]?.text).toContain('source images: 3');
   });
